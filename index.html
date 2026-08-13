@@ -39,8 +39,17 @@
       const [ocrProcessing, setOcrProcessing] = useState(false);
       useEffect(() => { try { const saved = localStorage.getItem(STORAGE_KEY); if (saved) setSavedRecords(JSON.parse(saved)); } catch { localStorage.removeItem(STORAGE_KEY); } }, []);
       useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(savedRecords)); }, [savedRecords]);
+      async function openImage(file) {
+        if ('createImageBitmap' in window) return createImageBitmap(file);
+        return new Promise((resolve, reject) => {
+          const url = URL.createObjectURL(file); const image = new Image();
+          image.onload = () => { URL.revokeObjectURL(url); resolve(image); };
+          image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('写真を読み込めませんでした。')); };
+          image.src = url;
+        });
+      }
       async function prepareScaleDisplay(file) {
-        const image = await createImageBitmap(file);
+        const image = await openImage(file);
         const probe = document.createElement('canvas');
         const probeWidth = Math.min(800, image.width);
         const probeHeight = Math.round(image.height * probeWidth / image.width);
@@ -62,14 +71,14 @@
         const scale = Math.min(3, 1600 / sourceWidth);
         const output = document.createElement('canvas'); output.width = Math.max(1, Math.round(sourceWidth * scale)); output.height = Math.max(1, Math.round(sourceHeight * scale));
         const context = output.getContext('2d'); context.filter = 'grayscale(1) contrast(240%)'; context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, output.width, output.height);
-        image.close();
+        image.close?.();
         return new Promise(resolve => output.toBlob(blob => resolve(blob || file), 'image/jpeg', .92));
       }
       async function runOCR(file) {
-        const form = new FormData();
-        const displayImage = await prepareScaleDisplay(file);
-        form.append('file', displayImage, 'scale-display.jpg'); form.append('language', 'eng'); form.append('isOverlayRequired', 'false'); form.append('OCREngine', '2'); form.append('scale', 'true'); form.append('isTable', 'false');
         try {
+          const form = new FormData();
+          const displayImage = await prepareScaleDisplay(file);
+          form.append('file', displayImage, 'scale-display.jpg'); form.append('language', 'eng'); form.append('isOverlayRequired', 'false'); form.append('OCREngine', '2'); form.append('scale', 'true'); form.append('isTable', 'false');
           const res = await fetch('https://api.ocr.space/parse/image', { method: 'POST', headers: { apikey: 'helloworld' }, body: form });
           if (!res.ok) throw new Error(`OCRサービスが応答しませんでした (${res.status})`);
           const data = await res.json();
