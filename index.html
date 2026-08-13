@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#2563eb" />
+  <title>ガス使用量管理</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif; background: linear-gradient(to bottom, #eff6ff, #fff); min-height: 100vh; color: #1f2937; padding-bottom: 40px; }
+    .header { position: sticky; top: 0; z-index: 10; background: #2563eb; color: #fff; box-shadow: 0 4px 6px rgba(0,0,0,.1); }
+    .header-inner { max-width: 480px; margin: 0 auto; padding: 16px; }.header h1 { font-size: 24px; }.header p { font-size: 13px; color: #bfdbfe; margin-top: 4px; }
+    .container { max-width: 480px; margin: 0 auto; padding: 24px 16px; }.card { background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.08); padding: 24px; margin-bottom: 24px; border: 2px solid #bfdbfe; }.card h2 { font-size: 18px; margin-bottom: 16px; }
+    label.field-label { display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px; }.field-group { margin-bottom: 24px; }
+    input.text-input { width: 100%; padding: 12px 16px; font-size: 18px; border: 2px solid #d1d5db; border-radius: 8px; background: #f9fafb; -webkit-appearance: none; appearance: none; } input.text-input:focus { outline: none; border-color: #3b82f6; }.date-input { text-align: center; }
+    .weight-box { padding: 16px; border-radius: 8px; margin-bottom: 24px; }.weight-box.before { background: #eff6ff; border: 2px solid #93c5fd; }.weight-box.after { background: #fff7ed; border: 2px solid #fdba74; }
+    .weight-display { background: #fff; border-radius: 8px; padding: 12px; margin-bottom: 12px; text-align: center; min-height: 56px; display: flex; align-items: center; justify-content: center; }.weight-value { font-size: 30px; font-weight: bold; }.weight-value.before { color: #2563eb; }.weight-value.after { color: #ea580c; }.weight-placeholder { color: #6b7280; }
+    .btn-row { display: flex; gap: 8px; }.btn { flex: 1; min-height: 48px; padding: 12px; font-size: 15px; font-weight: 600; color: #fff; border: 0; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; }.btn:active, .btn-save:active { transform: scale(.98); }.btn-camera { background: #3b82f6; }.btn-library { background: #22c55e; }.btn-save { width: 100%; min-height: 56px; padding: 16px; font-size: 18px; font-weight: bold; color: #fff; background: linear-gradient(to right, #22c55e, #16a34a); border: 0; border-radius: 8px; cursor: pointer; }.btn-save:disabled { background: #9ca3af; } input[type=file] { display: none; }
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.9); display: flex; align-items: center; justify-content: center; z-index: 50; }.overlay-inner { text-align: center; }.overlay-icon { font-size: 56px; margin-bottom: 16px; }.overlay-text { font-size: 18px; font-weight: 600; }.spin { animation: pulse 1s infinite; } @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+    .record { border-left: 4px solid #3b82f6; background: #eff6ff; padding: 16px; border-radius: 6px; margin-bottom: 12px; }.record-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }.record-num { font-weight: 600; }.record-date, .lbl { color: #6b7280; }.record-date { font-size: 12px; }.record-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 14px; }.record-grid .val { font-size: 18px; font-weight: bold; }.val.before { color: #2563eb; }.val.after { color: #ea580c; }.record-usage { margin-top: 8px; font-size: 12px; background: #fff; padding: 8px; border-radius: 4px; }.del-btn { background: none; border: 0; color: #dc2626; cursor: pointer; font-size: 14px; padding: 4px; }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+    const STORAGE_KEY = 'gasMeterRecords';
+    const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+    function App() {
+      const today = () => new Date().toISOString().split('T')[0];
+      const [formData, setFormData] = useState({ date: today(), receiptNumber: '', beforeWeight: '', afterWeight: '' });
+      const [savedRecords, setSavedRecords] = useState([]);
+      const [showOverlay, setShowOverlay] = useState(false);
+      const [ocrProcessing, setOcrProcessing] = useState(false);
+      useEffect(() => { try { const saved = localStorage.getItem(STORAGE_KEY); if (saved) setSavedRecords(JSON.parse(saved)); } catch { localStorage.removeItem(STORAGE_KEY); } }, []);
+      useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(savedRecords)); }, [savedRecords]);
+      async function runOCR(file) {
+        const form = new FormData();
+        form.append('file', file); form.append('language', 'eng'); form.append('isOverlayRequired', 'false'); form.append('OCREngine', '2'); form.append('scale', 'true');
+        try {
+          const res = await fetch('https://api.ocr.space/parse/image', { method: 'POST', headers: { apikey: 'helloworld' }, body: form });
+          if (!res.ok) throw new Error(`OCRサービスが応答しませんでした (${res.status})`);
+          const data = await res.json();
+          if (data.IsErroredOnProcessing) { alert('認識エラー: ' + (data.ErrorMessage || '不明')); return null; }
+          const text = data.ParsedResults?.[0]?.ParsedText || '';
+          const nums = text.match(/\d+\.?\d*/g);
+          return nums?.length ? nums.reduce((a, b) => a.length >= b.length ? a : b) : null;
+        } catch (error) { alert('通信エラー: ' + error.message); return null; }
+      }
+      async function handleFile(event, field) {
+        const file = event.target.files[0]; event.target.value = ''; if (!file) return;
+        if (!file.type.startsWith('image/')) return alert('写真ファイルを選択してください。');
+        if (file.size > MAX_IMAGE_BYTES) return alert('写真は10MB以下にしてください。');
+        setOcrProcessing(true); setShowOverlay(true);
+        const num = await runOCR(file);
+        if (num) { setFormData(previous => ({ ...previous, [field]: num })); setOcrProcessing(false); setTimeout(() => setShowOverlay(false), 800); }
+        else { setOcrProcessing(false); setShowOverlay(false); alert('数字を読み取れませんでした。表示部が大きく写るように、もう一度撮影してください。'); }
+      }
+      function handleSave() {
+        if (formData.date && formData.receiptNumber && formData.beforeWeight && formData.afterWeight) { setSavedRecords([{ ...formData, id: Date.now() }, ...savedRecords]); setFormData({ date: today(), receiptNumber: '', beforeWeight: '', afterWeight: '' }); }
+        else alert('すべての項目を入力してください');
+      }
+      function handleDelete(id) { if (confirm('削除しますか？')) setSavedRecords(savedRecords.filter(record => record.id !== id)); }
+      return <div>
+        <header className="header"><div className="header-inner"><h1>ガス使用量管理</h1><p>現場での片手記録</p></div></header>
+        <main className="container"><section className="card"><h2>新規記録</h2>
+          <div className="field-group"><label className="field-label" htmlFor="date">日付</label><input id="date" type="date" className="text-input date-input" value={formData.date} onChange={event => setFormData({ ...formData, date: event.target.value })} /></div>
+          <div className="field-group"><label className="field-label" htmlFor="receipt">受付番号</label><input id="receipt" type="text" className="text-input" placeholder="例）12345" value={formData.receiptNumber} onChange={event => setFormData({ ...formData, receiptNumber: event.target.value })} /></div>
+          {[['beforeWeight', '使用前重量 (kg)', 'before'], ['afterWeight', '使用後重量 (kg)', 'after']].map(([field, label, tone]) => <div className={`weight-box ${tone}`} key={field}><label className="field-label">{label}</label><div className="weight-display">{formData[field] ? <span className={`weight-value ${tone}`}>{formData[field]}</span> : <span className="weight-placeholder">待機中...</span>}</div><div className="btn-row"><label className="btn btn-camera">📷 カメラ<input type="file" accept="image/*" capture="environment" onChange={event => handleFile(event, field)} /></label><label className="btn btn-library">📁 ライブラリ<input type="file" accept="image/*" onChange={event => handleFile(event, field)} /></label></div></div>)}
+          <button className="btn-save" onClick={handleSave} disabled={ocrProcessing}>✓ 保存する</button>
+        </section>{savedRecords.length > 0 && <section className="card"><h2>記録履歴 ({savedRecords.length})</h2>{savedRecords.map(record => <article className="record" key={record.id}><div className="record-top"><span className="record-num">{record.receiptNumber}</span><span><span className="record-date">{record.date}</span><button className="del-btn" aria-label={`${record.receiptNumber}を削除`} onClick={() => handleDelete(record.id)}>🗑</button></span></div><div className="record-grid"><div><div className="lbl">使用前</div><div className="val before">{record.beforeWeight} kg</div></div><div><div className="lbl">使用後</div><div className="val after">{record.afterWeight} kg</div></div></div><div className="record-usage">使用量: <strong>{(parseFloat(record.beforeWeight) - parseFloat(record.afterWeight)).toFixed(3)}</strong> kg</div></article>)}</section>}</main>
+        {showOverlay && <div className="overlay" role="status" aria-live="polite"><div className="overlay-inner">{ocrProcessing ? <><div className="overlay-icon spin">🔄</div><div className="overlay-text" style={{ color: '#fde047' }}>認識中...</div></> : <><div className="overlay-icon">✓</div><div className="overlay-text" style={{ color: '#86efac' }}>完了！</div></>}</div></div>}
+      </div>;
+    }
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
