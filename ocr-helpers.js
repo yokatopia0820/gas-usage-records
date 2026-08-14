@@ -127,7 +127,48 @@
   }
 
   function decodeScaleWeight(imageData) {
-    return selectPreferredWeight([.30, .32, .34, .36, .38, .40].map(threshold => decodeSevenSegment(imageData, false, threshold)));
+    return decodeFixedScaleSlots(imageData) || selectPreferredWeight([.30, .32, .34, .36, .38, .40].map(threshold => decodeSevenSegment(imageData, false, threshold)));
+  }
+
+  // BOMATA's LCD has five fixed digit positions.  Reading those positions independently
+  // avoids joining digits together when the green panel has shadows or reflections.
+  function decodeFixedScaleSlots(imageData) {
+    const { width, height, data } = imageData;
+    const left = Math.floor(width * .36); const right = Math.floor(width * .98);
+    const top = Math.floor(height * .12); const bottom = Math.floor(height * .90);
+    if (right - left < 30 || bottom - top < 20) return null;
+    const digits = [];
+    for (let slot = 0; slot < 5; slot++) {
+      const slotLeft = Math.floor(left + (right - left) * slot / 5);
+      const slotRight = Math.floor(left + (right - left) * (slot + 1) / 5) - 1;
+      let min = 255; let max = 0;
+      for (let y = top; y <= bottom; y++) for (let x = slotLeft; x <= slotRight; x++) {
+        const offset = (y * width + x) * 4; const value = Math.round(data[offset] * .299 + data[offset + 1] * .587 + data[offset + 2] * .114);
+        min = Math.min(min, value); max = Math.max(max, value);
+      }
+      if (max - min < 28 || min > max * .78) { digits.push(''); continue; }
+      const cutoff = min + (max - min) * .48;
+      const density = (x1, y1, x2, y2) => {
+        let ink = 0; let area = 0;
+        const fromX = Math.max(slotLeft, Math.floor(slotLeft + (slotRight - slotLeft + 1) * x1));
+        const toX = Math.min(slotRight, Math.ceil(slotLeft + (slotRight - slotLeft + 1) * x2));
+        const fromY = Math.max(top, Math.floor(top + (bottom - top + 1) * y1));
+        const toY = Math.min(bottom, Math.ceil(top + (bottom - top + 1) * y2));
+        for (let y = fromY; y <= toY; y++) for (let x = fromX; x <= toX; x++) {
+          const offset = (y * width + x) * 4; const value = Math.round(data[offset] * .299 + data[offset + 1] * .587 + data[offset + 2] * .114);
+          area++; if (value < cutoff) ink++;
+        }
+        return area ? ink / area : 0;
+      };
+      const scores = {
+        a: density(.18, 0, .82, .20), b: density(.58, .12, 1, .48), c: density(.58, .52, 1, .88),
+        d: density(.18, .80, .82, 1), e: density(0, .52, .42, .88), f: density(0, .12, .42, .48), g: density(.18, .40, .82, .60)
+      };
+      const digit = bestDigitFromSegmentScores(scores);
+      digits.push(digit || '');
+    }
+    const text = digits.join('');
+    return /^\d{4,5}$/.test(text) ? `${text.slice(0, -3)}.${text.slice(-3)}` : null;
   }
 
   function decodeSevenSegment(imageData, debug = false, darkness = .42) {
@@ -193,5 +234,6 @@
   root.selectPreferredWeight = selectPreferredWeight;
   root.decodeScaleWeight = decodeScaleWeight;
   root.decodeSevenSegment = decodeSevenSegment;
-  if (typeof module !== 'undefined') module.exports = { selectWeightFromText, findDisplayBounds, estimateDisplayAngle, findDisplayCorners, displayCropRect, closestSevenSegmentDigit, bestDigitFromSegmentScores, selectStableWeight, selectPreferredWeight, decodeScaleWeight, decodeSevenSegment };
+  root.decodeFixedScaleSlots = decodeFixedScaleSlots;
+  if (typeof module !== 'undefined') module.exports = { selectWeightFromText, findDisplayBounds, estimateDisplayAngle, findDisplayCorners, displayCropRect, closestSevenSegmentDigit, bestDigitFromSegmentScores, selectStableWeight, selectPreferredWeight, decodeFixedScaleSlots, decodeScaleWeight, decodeSevenSegment };
 })(typeof globalThis === 'undefined' ? this : globalThis);
