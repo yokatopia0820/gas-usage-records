@@ -39,6 +39,10 @@ test('selectWeightFromText rejects unreasonably large numeric strings', () => {
   assert.equal(selectWeightFromText('model 20260814 serial 99887766'), null);
 });
 
+test('selectWeightFromText rejects a lone digit that is not a scale weight', () => {
+  assert.equal(selectWeightFromText('h2E\nON-'), null);
+});
+
 test('findDisplayBounds selects the bright green rectangular LCD instead of a large leafy green area', () => {
   const image = imageWithRegions(120, 100, [
     { x: 0, y: 0, width: 100, height: 30, color: [48, 96, 32] },
@@ -70,6 +74,14 @@ test('seven-segment matching rejects an ambiguous binary pattern and uses segmen
   assert.equal(helpers.closestSevenSegmentDigit('abcdeg'), null);
   assert.equal(helpers.closestSevenSegmentDigit('ab'), null);
   assert.equal(helpers.bestDigitFromSegmentScores({ a: .65, b: .58, c: .58, d: .71, e: .18, f: .10, g: .54 }), '3');
+});
+
+test('bestDigitByContrast keeps inactive segments from being classified as 8', () => {
+  assert.equal(helpers.bestDigitByContrast({ a: .80, b: .70, c: .72, d: .81, e: .08, f: .10, g: .76 }), '3');
+});
+
+test('decodeAdaptiveSevenSegment reads a green seven-segment display', () => {
+  assert.equal(helpers.decodeAdaptiveSevenSegment(sevenSegmentImage('7.324')), '7.324');
 });
 
 test('selectStableWeight returns only a reading confirmed by multiple thresholds', () => {

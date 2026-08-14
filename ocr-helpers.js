@@ -114,6 +114,18 @@
     return candidates[0].score - candidates[1].score >= .03 ? candidates[0].digit : null;
   }
 
+  function bestDigitByContrast(scores) {
+    const candidates = Object.entries(sevenSegmentPatterns).map(([digit, pattern]) => {
+      const expected = new Set(pattern); let loss = 0;
+      for (const segment of Object.keys(scores)) {
+        const target = expected.has(segment) ? 1 : 0;
+        loss += (scores[segment] - target) ** 2;
+      }
+      return { digit, loss };
+    }).sort((left, right) => left.loss - right.loss);
+    return candidates[0].loss + .04 < candidates[1].loss ? candidates[0].digit : null;
+  }
+
   function selectStableWeight(readings) {
     const counts = new Map();
     for (const reading of readings) if (/^\d{1,2}\.\d{3}$/.test(reading || '')) counts.set(reading, (counts.get(reading) || 0) + 1);
@@ -127,7 +139,34 @@
   }
 
   function decodeScaleWeight(imageData) {
-    return decodeFixedScaleSlots(imageData) || selectPreferredWeight([.30, .32, .34, .36, .38, .40].map(threshold => decodeSevenSegment(imageData, false, threshold)));
+    return decodeAdaptiveSevenSegment(imageData) || decodeFixedScaleSlots(imageData) || selectPreferredWeight([.30, .32, .34, .36, .38, .40].map(threshold => decodeSevenSegment(imageData, false, threshold)));
+  }
+
+  function decodeAdaptiveSevenSegment(imageData) {
+    const { width, height, data } = imageData; const total = width * height;
+    if (width < 20 || height < 20) return null;
+    const brightness = new Uint8Array(total); const stride = width + 1; const integral = new Float64Array((height + 1) * stride);
+    for (let y = 0; y < height; y++) {
+      let row = 0;
+      for (let x = 0; x < width; x++) {
+        const index = y * width + x; const offset = index * 4;
+        const value = Math.round(data[offset] * .299 + data[offset + 1] * .587 + data[offset + 2] * .114);
+        brightness[index] = value; row += value;
+        integral[(y + 1) * stride + x + 1] = integral[y * stride + x + 1] + row;
+      }
+    }
+    const radius = Math.max(5, Math.round(Math.min(width, height) * .10));
+    const binary = new Uint8ClampedArray(total * 4);
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const left = Math.max(0, x - radius); const right = Math.min(width - 1, x + radius);
+      const top = Math.max(0, y - radius); const bottom = Math.min(height - 1, y + radius);
+      const area = (right - left + 1) * (bottom - top + 1);
+      const sum = integral[(bottom + 1) * stride + right + 1] - integral[top * stride + right + 1] - integral[(bottom + 1) * stride + left] + integral[top * stride + left];
+      const dark = brightness[y * width + x] < sum / area - 30;
+      const offset = (y * width + x) * 4; const color = dark ? 0 : 255;
+      binary[offset] = binary[offset + 1] = binary[offset + 2] = color; binary[offset + 3] = 255;
+    }
+    return decodeSevenSegment({ width, height, data: binary }, false, .5, true);
   }
 
   // BOMATA's LCD has five fixed digit positions.  Reading those positions independently
@@ -171,7 +210,7 @@
     return /^\d{4,5}$/.test(text) ? `${text.slice(0, -3)}.${text.slice(-3)}` : null;
   }
 
-  function decodeSevenSegment(imageData, debug = false, darkness = .42) {
+  function decodeSevenSegment(imageData, debug = false, darkness = .42, preferContrast = false) {
     const { width, height, data } = imageData; const total = width * height;
     const brightness = new Uint8Array(total); let min = 255; let max = 0;
     for (let index = 0; index < total; index++) { const offset = index * 4; const value = Math.round(data[offset] * .299 + data[offset + 1] * .587 + data[offset + 2] * .114); brightness[index] = value; min = Math.min(min, value); max = Math.max(max, value); }
@@ -192,7 +231,7 @@
       const regions = { a: [.18, 0, .82, .20], b: [.58, .12, 1, .48], c: [.58, .52, 1, .88], d: [.18, .80, .82, 1], e: [0, .52, .42, .88], f: [0, .12, .42, .48], g: [.18, .40, .82, .60] };
       const scores = Object.fromEntries(Object.entries(regions).map(([name, region]) => [name, density(...region)]));
       const on = Object.entries(scores).filter(([name, score]) => score > (name === 'a' || name === 'd' || name === 'g' ? .4 : .16)).map(([name]) => name).join('');
-      const closest = closestSevenSegmentDigit(on); const digit = closest?.digit || (on.length >= 4 ? bestDigitFromSegmentScores(scores) : null); if (digit) parts.push(digit); detail.push({ ...group, on, digit, distance: closest?.distance ?? null, scores });
+      const closest = closestSevenSegmentDigit(on); const digit = preferContrast ? bestDigitByContrast(scores) : (closest?.digit || (on.length >= 4 ? bestDigitFromSegmentScores(scores) : null)); if (digit) parts.push(digit); detail.push({ ...group, on, digit, distance: closest?.distance ?? null, scores });
     }
     const value = parts.join('').replace(/^\.+|\.+$/g, '');
     const digits = parts.filter(part => /^\d$/.test(part)).join('');
@@ -213,7 +252,7 @@
         return [{ normalized: inferred.toFixed(3), numeric: inferred, hasDecimal: true, inferred: true, fractionLength: 3 }];
       }
       return [{ normalized, numeric, hasDecimal: false, inferred: false, fractionLength: 0 }];
-    }).filter(candidate => Number.isFinite(candidate.numeric) && candidate.numeric > 0 && candidate.numeric <= 200);
+    }).filter(candidate => Number.isFinite(candidate.numeric) && candidate.numeric > 0 && candidate.numeric <= 200 && candidate.hasDecimal);
 
     if (!plausible.length) return null;
     plausible.sort((a, b) => {
@@ -230,10 +269,12 @@
   root.displayCropRect = displayCropRect;
   root.closestSevenSegmentDigit = closestSevenSegmentDigit;
   root.bestDigitFromSegmentScores = bestDigitFromSegmentScores;
+  root.bestDigitByContrast = bestDigitByContrast;
   root.selectStableWeight = selectStableWeight;
   root.selectPreferredWeight = selectPreferredWeight;
   root.decodeScaleWeight = decodeScaleWeight;
+  root.decodeAdaptiveSevenSegment = decodeAdaptiveSevenSegment;
   root.decodeSevenSegment = decodeSevenSegment;
   root.decodeFixedScaleSlots = decodeFixedScaleSlots;
-  if (typeof module !== 'undefined') module.exports = { selectWeightFromText, findDisplayBounds, estimateDisplayAngle, findDisplayCorners, displayCropRect, closestSevenSegmentDigit, bestDigitFromSegmentScores, selectStableWeight, selectPreferredWeight, decodeFixedScaleSlots, decodeScaleWeight, decodeSevenSegment };
+  if (typeof module !== 'undefined') module.exports = { selectWeightFromText, findDisplayBounds, estimateDisplayAngle, findDisplayCorners, displayCropRect, closestSevenSegmentDigit, bestDigitFromSegmentScores, bestDigitByContrast, selectStableWeight, selectPreferredWeight, decodeFixedScaleSlots, decodeAdaptiveSevenSegment, decodeScaleWeight, decodeSevenSegment };
 })(typeof globalThis === 'undefined' ? this : globalThis);
