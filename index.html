@@ -27,7 +27,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
-  <script src="ocr-helpers.js?v=angle1"></script>
+  <script src="ocr-helpers.js?v=rectify1"></script>
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
     const STORAGE_KEY = 'gasMeterRecords';
@@ -68,13 +68,18 @@
         const crop = displayCropRect(bounds, probeWidth, probeHeight);
         if (!crop) { image.close?.(); return { foundDisplay: false }; }
 
-        const angle = estimateDisplayAngle(probeContext.getImageData(0, 0, probeWidth, probeHeight), bounds);
-        const cosine = Math.abs(Math.cos(angle)); const sine = Math.abs(Math.sin(angle));
-        const leveled = document.createElement('canvas'); leveled.width = Math.ceil(bounds.width * cosine + bounds.height * sine); leveled.height = Math.ceil(bounds.width * sine + bounds.height * cosine);
-        const leveledContext = leveled.getContext('2d', { willReadFrequently: true });
-        leveledContext.translate(leveled.width / 2, leveled.height / 2); leveledContext.rotate(-angle);
-        leveledContext.drawImage(probe, bounds.x, bounds.y, bounds.width, bounds.height, -bounds.width / 2, -bounds.height / 2, bounds.width, bounds.height);
-        const localWeight = decodeScaleWeight(leveledContext.getImageData(0, 0, leveled.width, leveled.height));
+        const corners = findDisplayCorners(probeImage, bounds);
+        const distance = (left, right) => Math.hypot(right.x - left.x, right.y - left.y);
+        const leveled = document.createElement('canvas'); leveled.width = Math.round(Math.max(distance(corners.topLeft, corners.topRight), distance(corners.bottomLeft, corners.bottomRight))); leveled.height = Math.round(Math.max(distance(corners.topLeft, corners.bottomLeft), distance(corners.topRight, corners.bottomRight)));
+        const leveledContext = leveled.getContext('2d', { willReadFrequently: true }); const leveledImage = leveledContext.createImageData(leveled.width, leveled.height);
+        for (let y = 0; y < leveled.height; y++) for (let x = 0; x < leveled.width; x++) {
+          const u = x / Math.max(1, leveled.width - 1); const v = y / Math.max(1, leveled.height - 1);
+          const sourceX = Math.round((1-u)*(1-v)*corners.topLeft.x + u*(1-v)*corners.topRight.x + u*v*corners.bottomRight.x + (1-u)*v*corners.bottomLeft.x);
+          const sourceY = Math.round((1-u)*(1-v)*corners.topLeft.y + u*(1-v)*corners.topRight.y + u*v*corners.bottomRight.y + (1-u)*v*corners.bottomLeft.y);
+          const source = (sourceY * probeWidth + sourceX) * 4; const target = (y * leveled.width + x) * 4;
+          leveledImage.data[target] = probeImage.data[source]; leveledImage.data[target + 1] = probeImage.data[source + 1]; leveledImage.data[target + 2] = probeImage.data[source + 2]; leveledImage.data[target + 3] = 255;
+        }
+        leveledContext.putImageData(leveledImage, 0, 0); const localWeight = decodeScaleWeight(leveledImage);
         const sourceX = crop.x * image.width / probeWidth;
         const sourceY = crop.y * image.height / probeHeight;
         const sourceWidth = crop.width * image.width / probeWidth;

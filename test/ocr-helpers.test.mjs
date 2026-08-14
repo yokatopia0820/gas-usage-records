@@ -52,6 +52,13 @@ test('estimateDisplayAngle reports an axis-aligned LCD as level', () => {
   assert.ok(Math.abs(helpers.estimateDisplayAngle(image, { x: 28, y: 58, width: 64, height: 24 })) < .001);
 });
 
+test('findDisplayCorners preserves the four corners of an axis-aligned LCD', () => {
+  const image = imageWithRegions(120, 100, [{ x: 28, y: 58, width: 64, height: 24, color: [35, 210, 55] }]);
+  assert.deepEqual(helpers.findDisplayCorners(image, { x: 28, y: 58, width: 64, height: 24 }), {
+    topLeft: { x: 28, y: 58 }, topRight: { x: 91, y: 58 }, bottomRight: { x: 91, y: 81 }, bottomLeft: { x: 28, y: 81 },
+  });
+});
+
 test('displayCropRect keeps only the detected LCD with a small safety margin', () => {
   assert.deepEqual(
     helpers.displayCropRect({ x: 28, y: 58, width: 64, height: 24 }, 120, 100),

@@ -51,6 +51,28 @@
     return .5 * Math.atan2(2 * xy, xx - yy);
   }
 
+  function findDisplayCorners(imageData, bounds) {
+    if (!bounds) return null;
+    const { width, data } = imageData; const top = []; const bottom = [];
+    for (let x = bounds.x; x < bounds.x + bounds.width; x++) {
+      let first = null; let last = null;
+      for (let y = bounds.y; y < bounds.y + bounds.height; y++) {
+        const offset = (y * width + x) * 4; const red = data[offset]; const green = data[offset + 1]; const blue = data[offset + 2];
+        if (!(green >= 105 && green - red >= 35 && green - blue >= 20 && green > red * 1.25 && green > blue * 1.18)) continue;
+        if (first === null) first = y; last = y;
+      }
+      if (first !== null) { top.push({ x, y: first }); bottom.push({ x, y: last }); }
+    }
+    if (top.length < 2) return null;
+    const fit = points => {
+      const meanX = points.reduce((sum, point) => sum + point.x, 0) / points.length; const meanY = points.reduce((sum, point) => sum + point.y, 0) / points.length;
+      const slope = points.reduce((sum, point) => sum + (point.x - meanX) * (point.y - meanY), 0) / points.reduce((sum, point) => sum + (point.x - meanX) ** 2, 0);
+      return x => slope * (x - meanX) + meanY;
+    };
+    const topLine = fit(top); const bottomLine = fit(bottom); const left = top[0].x; const right = top[top.length - 1].x;
+    return { topLeft: { x: left, y: Math.round(topLine(left)) }, topRight: { x: right, y: Math.round(topLine(right)) }, bottomRight: { x: right, y: Math.round(bottomLine(right)) }, bottomLeft: { x: left, y: Math.round(bottomLine(left)) } };
+  }
+
   // Keep the crop tight: recognition must never see labels, barcodes, or buttons.
   function displayCropRect(bounds, sourceWidth, sourceHeight, paddingRatio = .05) {
     if (!bounds || !sourceWidth || !sourceHeight) return null;
@@ -163,6 +185,7 @@
   root.selectWeightFromText = selectWeightFromText;
   root.findDisplayBounds = findDisplayBounds;
   root.estimateDisplayAngle = estimateDisplayAngle;
+  root.findDisplayCorners = findDisplayCorners;
   root.displayCropRect = displayCropRect;
   root.closestSevenSegmentDigit = closestSevenSegmentDigit;
   root.bestDigitFromSegmentScores = bestDigitFromSegmentScores;
@@ -170,5 +193,5 @@
   root.selectPreferredWeight = selectPreferredWeight;
   root.decodeScaleWeight = decodeScaleWeight;
   root.decodeSevenSegment = decodeSevenSegment;
-  if (typeof module !== 'undefined') module.exports = { selectWeightFromText, findDisplayBounds, estimateDisplayAngle, displayCropRect, closestSevenSegmentDigit, bestDigitFromSegmentScores, selectStableWeight, selectPreferredWeight, decodeScaleWeight, decodeSevenSegment };
+  if (typeof module !== 'undefined') module.exports = { selectWeightFromText, findDisplayBounds, estimateDisplayAngle, findDisplayCorners, displayCropRect, closestSevenSegmentDigit, bestDigitFromSegmentScores, selectStableWeight, selectPreferredWeight, decodeScaleWeight, decodeSevenSegment };
 })(typeof globalThis === 'undefined' ? this : globalThis);
