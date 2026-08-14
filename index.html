@@ -73,16 +73,8 @@
       }
       async function runOCR(file) {
         try {
-          const form = new FormData();
           const prepared = await prepareScaleDisplay(file);
-          if (prepared.localWeight) return prepared.localWeight;
-          form.append('file', prepared.image, 'scale-display.jpg'); form.append('language', 'eng'); form.append('isOverlayRequired', 'false'); form.append('OCREngine', '2'); form.append('scale', 'true'); form.append('isTable', 'false');
-          const res = await fetch('https://api.ocr.space/parse/image', { method: 'POST', headers: { apikey: 'helloworld' }, body: form });
-          if (!res.ok) throw new Error(`OCRサービスが応答しませんでした (${res.status})`);
-          const data = await res.json();
-          if (data.IsErroredOnProcessing) { alert('認識エラー: ' + (data.ErrorMessage || '不明')); return null; }
-          const text = data.ParsedResults?.[0]?.ParsedText || '';
-          return selectWeightFromText(text);
+          return prepared.localWeight;
         } catch (error) { alert('通信エラー: ' + error.message); return null; }
       }
       async function handleFile(event, field) {

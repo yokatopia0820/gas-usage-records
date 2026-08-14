@@ -33,31 +33,35 @@
     return best && { x: best.x, y: best.y, width: best.width, height: best.height };
   }
 
-  function decodeSevenSegment(imageData) {
+  function decodeSevenSegment(imageData, debug = false, darkness = .42) {
     const { width, height, data } = imageData; const total = width * height;
     const brightness = new Uint8Array(total); let min = 255; let max = 0;
     for (let index = 0; index < total; index++) { const offset = index * 4; const value = Math.round(data[offset] * .299 + data[offset + 1] * .587 + data[offset + 2] * .114); brightness[index] = value; min = Math.min(min, value); max = Math.max(max, value); }
     if (max - min < 45) return null;
-    const cutoff = min + (max - min) * .42; const dark = new Uint8Array(total);
+    const cutoff = min + (max - min) * darkness; const dark = new Uint8Array(total);
     for (let index = 0; index < total; index++) dark[index] = brightness[index] < cutoff ? 1 : 0;
     const groups = []; let start = -1;
     for (let x = 0; x < width; x++) { let count = 0; for (let y = 0; y < height; y++) count += dark[y * width + x]; const active = count >= Math.max(2, height * .02); if (active && start < 0) start = x; if ((!active || x === width - 1) && start >= 0) { groups.push({ left: start, right: active && x === width - 1 ? x : x - 1 }); start = -1; } }
     const patterns = { abcdef: '0', bc: '1', abdeg: '2', abcdg: '3', bcfg: '4', abcfg: '4', acdfg: '5', acdefg: '6', abc: '7', abcdefg: '8', abcdfg: '9' };
-    const parts = [];
+    const parts = []; const detail = [];
     for (const group of groups) {
       let top = height; let bottom = 0; let pixels = 0;
       for (let x = group.left; x <= group.right; x++) for (let y = 0; y < height; y++) if (dark[y * width + x]) { top = Math.min(top, y); bottom = Math.max(bottom, y); pixels++; }
       const groupWidth = group.right - group.left + 1; const groupHeight = bottom - top + 1;
-      if (groupHeight < height * .3 && groupWidth < width * .08) { parts.push('.'); continue; }
+      if (groupHeight < height * .3 && groupWidth < width * .08) { parts.push('.'); detail.push({ ...group, on: '.', digit: '.' }); continue; }
       if (groupHeight < height * .45 || groupWidth < 2) continue;
-      if (groupWidth < groupHeight * .18) { parts.push('1'); continue; }
+      if (groupWidth < groupHeight * .3) { parts.push('1'); detail.push({ ...group, on: '1', digit: '1' }); continue; }
       const density = (x1, y1, x2, y2) => { let count = 0; let area = 0; for (let y = Math.max(top, Math.floor(top + groupHeight * y1)); y <= Math.min(bottom, Math.ceil(top + groupHeight * y2)); y++) for (let x = Math.max(group.left, Math.floor(group.left + groupWidth * x1)); x <= Math.min(group.right, Math.ceil(group.left + groupWidth * x2)); x++) { area++; count += dark[y * width + x]; } return area ? count / area : 0; };
       const regions = { a: [.18, 0, .82, .20], b: [.58, .12, 1, .48], c: [.58, .52, 1, .88], d: [.18, .80, .82, 1], e: [0, .52, .42, .88], f: [0, .12, .42, .48], g: [.18, .40, .82, .60] };
-      const on = Object.entries(regions).filter(([, region]) => density(...region) > .16).map(([name]) => name).join('');
-      if (patterns[on]) parts.push(patterns[on]);
+      const scores = Object.fromEntries(Object.entries(regions).map(([name, region]) => [name, density(...region)]));
+      const on = Object.entries(scores).filter(([name, score]) => score > (name === 'a' || name === 'd' || name === 'g' ? .4 : .16)).map(([name]) => name).join('');
+      const digit = patterns[on] || null; if (digit) parts.push(digit); detail.push({ ...group, on, digit, scores });
     }
     const value = parts.join('').replace(/^\.+|\.+$/g, '');
-    return /^\d{1,2}\.\d{3}$/.test(value) ? value : null;
+    const digits = parts.filter(part => /^\d$/.test(part)).join('');
+    const inferred = /^\d{5}$/.test(digits) ? `${digits.slice(0, -3)}.${digits.slice(-3)}` : value;
+    const decoded = /^\d{1,2}\.\d{3}$/.test(inferred) ? inferred : null;
+    return debug ? { decoded, value, detail } : decoded;
   }
 
   function selectWeightFromText(text) {

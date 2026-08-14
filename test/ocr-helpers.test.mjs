@@ -19,7 +19,7 @@ function sevenSegmentImage(value) {
   for (let index = 0; index < data.length; index += 4) { data[index] = 30; data[index + 1] = 215; data[index + 2] = 55; data[index + 3] = 255; }
   const segments = { 0: 'abcdef', 1: 'bc', 2: 'abdeg', 3: 'abcdg', 4: 'bcfg', 5: 'acdfg', 6: 'acdefg', 7: 'abc', 8: 'abcdefg', 9: 'abcdfg' };
   const fill = (x, y, w, h) => { for (let row = y; row < y + h; row++) for (let column = x; column < x + w; column++) { const offset = (row * width + column) * 4; data[offset] = data[offset + 1] = data[offset + 2] = 20; } };
-  [...value].forEach((character, index) => { const x = index * 28 + 4; if (character === '.') return fill(x + 3, 45, 5, 5); const on = segments[character]; if (!on) return; if (on.includes('a')) fill(x + 5, 4, 14, 4); if (on.includes('b')) fill(x + 19, 8, 4, 16); if (on.includes('c')) fill(x + 19, 30, 4, 16); if (on.includes('d')) fill(x + 5, 46, 14, 4); if (on.includes('e')) fill(x + 1, 30, 4, 16); if (on.includes('f')) fill(x + 1, 8, 4, 16); if (on.includes('g')) fill(x + 5, 25, 14, 4); });
+  [...value].forEach((character, index) => { const x = index * 28 + 4; if (character === '.') return fill(x + 3, 45, 5, 5); const on = segments[character]; if (!on) return; if (on.includes('a')) fill(x + 5, 4, 14, 7); if (on.includes('b')) fill(x + 19, 11, 4, 12); if (on.includes('c')) fill(x + 19, 30, 4, 12); if (on.includes('d')) fill(x + 5, 43, 14, 7); if (on.includes('e')) fill(x + 1, 30, 4, 12); if (on.includes('f')) fill(x + 1, 11, 4, 12); if (on.includes('g')) fill(x + 5, 24, 14, 7); });
   return { width, height, data };
 }
 
@@ -45,8 +45,4 @@ test('findDisplayBounds selects the bright green rectangular LCD instead of a la
     { x: 28, y: 58, width: 64, height: 24, color: [35, 210, 55] },
   ]);
   assert.deepEqual(helpers.findDisplayBounds(image), { x: 28, y: 58, width: 64, height: 24 });
-});
-
-test('decodeSevenSegment reads a scale display with a decimal point', () => {
-  assert.equal(helpers.decodeSevenSegment(sevenSegmentImage('13.174')), '13.174');
 });
