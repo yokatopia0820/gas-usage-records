@@ -12,10 +12,11 @@
     .header-inner { max-width: 480px; margin: 0 auto; padding: 16px; }.header h1 { font-size: 24px; }.header p { font-size: 13px; color: #bfdbfe; margin-top: 4px; }
     .container { max-width: 480px; margin: 0 auto; padding: 24px 16px; }.card { background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.08); padding: 24px; margin-bottom: 24px; border: 2px solid #bfdbfe; }.card h2 { font-size: 18px; margin-bottom: 16px; }
     label.field-label { display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px; }.field-group { margin-bottom: 24px; }
-    input.text-input { width: 100%; padding: 12px 16px; font-size: 18px; border: 2px solid #d1d5db; border-radius: 8px; background: #f9fafb; -webkit-appearance: none; appearance: none; } input.text-input:focus { outline: none; border-color: #3b82f6; }.date-input { text-align: center; }
+    input.text-input, .weight-edit { width: 100%; padding: 12px 16px; font-size: 18px; border: 2px solid #d1d5db; border-radius: 8px; background: #f9fafb; -webkit-appearance: none; appearance: none; } input.text-input:focus, .weight-edit:focus { outline: none; border-color: #3b82f6; }.date-input { text-align: center; }.weight-edit { min-height: 48px; margin-bottom: 12px; text-align: center; background: #fff; }
     .weight-box { padding: 16px; border-radius: 8px; margin-bottom: 24px; }.weight-box.before { background: #eff6ff; border: 2px solid #93c5fd; }.weight-box.after { background: #fff7ed; border: 2px solid #fdba74; }
-    .weight-display { background: #fff; border-radius: 8px; padding: 12px; margin-bottom: 12px; text-align: center; min-height: 56px; display: flex; align-items: center; justify-content: center; }.weight-value { font-size: 30px; font-weight: bold; }.weight-value.before { color: #2563eb; }.weight-value.after { color: #ea580c; }.weight-placeholder { color: #6b7280; }.weight-edit { width: 100%; min-height: 48px; margin-bottom: 12px; padding: 10px 12px; border: 2px solid #d1d5db; border-radius: 8px; background: #fff; color: #1f2937; font-size: 18px; text-align: center; -webkit-appearance: none; appearance: none; }
+    .weight-display { background: #fff; border-radius: 8px; padding: 12px; margin-bottom: 12px; text-align: center; min-height: 56px; display: flex; align-items: center; justify-content: center; }.weight-value { font-size: 30px; font-weight: bold; }.weight-value.before { color: #2563eb; }.weight-value.after { color: #ea580c; }.weight-placeholder { color: #6b7280; }
     .btn-row { display: flex; gap: 8px; }.btn { flex: 1; min-height: 48px; padding: 12px; font-size: 15px; font-weight: 600; color: #fff; border: 0; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; }.btn:active, .btn-save:active { transform: scale(.98); }.btn-camera { background: #3b82f6; }.btn-library { background: #22c55e; }.btn-save { width: 100%; min-height: 56px; padding: 16px; font-size: 18px; font-weight: bold; color: #fff; background: linear-gradient(to right, #22c55e, #16a34a); border: 0; border-radius: 8px; cursor: pointer; }.btn-save:disabled { background: #9ca3af; } input[type=file] { display: none; }
+    .lcd-preview { margin-top: 14px; border: 2px solid #86efac; border-radius: 8px; background: #f0fdf4; padding: 10px; }.lcd-preview figcaption { font-size: 13px; font-weight: 700; color: #166534; margin-bottom: 8px; }.lcd-preview img { display: block; width: 100%; max-height: 150px; object-fit: contain; border-radius: 4px; background: #111827; }
     .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.9); display: flex; align-items: center; justify-content: center; z-index: 50; }.overlay-inner { text-align: center; }.overlay-icon { font-size: 56px; margin-bottom: 16px; }.overlay-text { font-size: 18px; font-weight: 600; }.spin { animation: pulse 1s infinite; } @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
     .record { border-left: 4px solid #3b82f6; background: #eff6ff; padding: 16px; border-radius: 6px; margin-bottom: 12px; }.record-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }.record-num { font-weight: 600; }.record-date, .lbl { color: #6b7280; }.record-date { font-size: 12px; }.record-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 14px; }.record-grid .val { font-size: 18px; font-weight: bold; }.val.before { color: #2563eb; }.val.after { color: #ea580c; }.record-usage { margin-top: 8px; font-size: 12px; background: #fff; padding: 8px; border-radius: 4px; }.del-btn { background: none; border: 0; color: #dc2626; cursor: pointer; font-size: 14px; padding: 4px; }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
@@ -28,26 +29,33 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
   <script src="ocr-helpers.js"></script>
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef } = React;
     const STORAGE_KEY = 'gasMeterRecords';
     const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
     function App() {
       const today = () => new Date().toISOString().split('T')[0];
       const [formData, setFormData] = useState({ date: today(), receiptNumber: '', beforeWeight: '', afterWeight: '' });
       const [savedRecords, setSavedRecords] = useState([]);
       const [showOverlay, setShowOverlay] = useState(false);
       const [ocrProcessing, setOcrProcessing] = useState(false);
+      const [lcdPreviews, setLcdPreviews] = useState({ beforeWeight: '', afterWeight: '' });
+      const previewUrlsRef = useRef({});
+
       useEffect(() => { try { const saved = localStorage.getItem(STORAGE_KEY); if (saved) setSavedRecords(JSON.parse(saved)); } catch { localStorage.removeItem(STORAGE_KEY); } }, []);
       useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(savedRecords)); }, [savedRecords]);
+      useEffect(() => () => Object.values(previewUrlsRef.current).forEach(url => URL.revokeObjectURL(url)), []);
+
       async function openImage(file) {
         if ('createImageBitmap' in window) return createImageBitmap(file);
         return new Promise((resolve, reject) => {
           const url = URL.createObjectURL(file); const image = new Image();
           image.onload = () => { URL.revokeObjectURL(url); resolve(image); };
-          image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('写真を読み込めませんでした。')); };
+          image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('画像を読み込めませんでした。')); };
           image.src = url;
         });
       }
+
       async function prepareScaleDisplay(file) {
         const image = await openImage(file);
         const probe = document.createElement('canvas');
@@ -56,50 +64,63 @@
         probe.width = probeWidth; probe.height = probeHeight;
         const probeContext = probe.getContext('2d', { willReadFrequently: true });
         probeContext.drawImage(image, 0, 0, probeWidth, probeHeight);
-        const probeImage = probeContext.getImageData(0, 0, probeWidth, probeHeight);
-        const bounds = findDisplayBounds(probeImage);
-        const foundDisplay = Boolean(bounds);
-        const localWeight = foundDisplay ? decodeSevenSegment(probeContext.getImageData(bounds.x, bounds.y, bounds.width, bounds.height)) : null;
-        const pad = foundDisplay ? Math.max(bounds.width, bounds.height) * .12 : 0;
-        const sourceX = foundDisplay ? Math.max(0, (bounds.x - pad) * image.width / probeWidth) : 0;
-        const sourceY = foundDisplay ? Math.max(0, (bounds.y - pad) * image.height / probeHeight) : 0;
-        const sourceWidth = foundDisplay ? Math.min(image.width - sourceX, (bounds.width + pad * 2) * image.width / probeWidth) : image.width;
-        const sourceHeight = foundDisplay ? Math.min(image.height - sourceY, (bounds.height + pad * 2) * image.height / probeHeight) : image.height;
+        const bounds = findDisplayBounds(probeContext.getImageData(0, 0, probeWidth, probeHeight));
+        const crop = displayCropRect(bounds, probeWidth, probeHeight);
+        if (!crop) { image.close?.(); return { foundDisplay: false }; }
+
+        const localWeight = decodeSevenSegment(probeContext.getImageData(bounds.x, bounds.y, bounds.width, bounds.height));
+        const sourceX = crop.x * image.width / probeWidth;
+        const sourceY = crop.y * image.height / probeHeight;
+        const sourceWidth = crop.width * image.width / probeWidth;
+        const sourceHeight = crop.height * image.height / probeHeight;
         const scale = Math.min(3, 1600 / sourceWidth);
-        const output = document.createElement('canvas'); output.width = Math.max(1, Math.round(sourceWidth * scale)); output.height = Math.max(1, Math.round(sourceHeight * scale));
-        const context = output.getContext('2d'); context.filter = 'grayscale(1) contrast(240%)'; context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, output.width, output.height);
+        const output = document.createElement('canvas');
+        output.width = Math.max(1, Math.round(sourceWidth * scale));
+        output.height = Math.max(1, Math.round(sourceHeight * scale));
+        output.getContext('2d').drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, output.width, output.height);
         image.close?.();
-        return new Promise(resolve => output.toBlob(blob => resolve({ image: blob || file, localWeight }), 'image/jpeg', .92));
+        return new Promise(resolve => output.toBlob(blob => resolve({ foundDisplay: true, preview: blob || file, localWeight }), 'image/jpeg', .92));
       }
-      async function runOCR(file) {
-        try {
-          const prepared = await prepareScaleDisplay(file);
-          return prepared.localWeight;
-        } catch (error) { alert('通信エラー: ' + error.message); return null; }
-      }
+
       async function handleFile(event, field) {
         const file = event.target.files[0]; event.target.value = ''; if (!file) return;
-        if (!file.type.startsWith('image/')) return alert('写真ファイルを選択してください。');
-        if (file.size > MAX_IMAGE_BYTES) return alert('写真は10MB以下にしてください。');
+        if (!file.type.startsWith('image/')) return alert('画像ファイルを選択してください。');
+        if (file.size > MAX_IMAGE_BYTES) return alert('画像は10MB以下にしてください。');
         setOcrProcessing(true); setShowOverlay(true);
-        const num = await runOCR(file);
-        if (num) { setFormData(previous => ({ ...previous, [field]: num })); setOcrProcessing(false); setTimeout(() => setShowOverlay(false), 800); }
-        else { setOcrProcessing(false); setShowOverlay(false); alert('数字を読み取れませんでした。表示部が大きく写るように、もう一度撮影してください。'); }
+        try {
+          const prepared = await prepareScaleDisplay(file);
+          if (!prepared.foundDisplay) throw new Error('緑の表示部を見つけられませんでした。表示部が大きく入るように撮影してください。');
+          const previewUrl = URL.createObjectURL(prepared.preview);
+          const previousUrl = previewUrlsRef.current[field];
+          previewUrlsRef.current[field] = previewUrl;
+          if (previousUrl) URL.revokeObjectURL(previousUrl);
+          setLcdPreviews(previous => ({ ...previous, [field]: previewUrl }));
+        } catch (error) { alert('画像処理エラー: ' + error.message); }
+        setOcrProcessing(false); setShowOverlay(false);
       }
+
       function handleSave() {
-        if (formData.date && formData.receiptNumber && formData.beforeWeight && formData.afterWeight) { setSavedRecords([{ ...formData, id: Date.now() }, ...savedRecords]); setFormData({ date: today(), receiptNumber: '', beforeWeight: '', afterWeight: '' }); }
-        else alert('すべての項目を入力してください');
+        if (formData.date && formData.receiptNumber && formData.beforeWeight && formData.afterWeight) {
+          setSavedRecords([{ ...formData, id: Date.now() }, ...savedRecords]);
+          setFormData({ date: today(), receiptNumber: '', beforeWeight: '', afterWeight: '' });
+        } else alert('すべての項目を入力してください');
       }
       function handleDelete(id) { if (confirm('削除しますか？')) setSavedRecords(savedRecords.filter(record => record.id !== id)); }
+
       return <div>
         <header className="header"><div className="header-inner"><h1>ガス使用量管理</h1><p>現場での片手記録</p></div></header>
         <main className="container"><section className="card"><h2>新規記録</h2>
           <div className="field-group"><label className="field-label" htmlFor="date">日付</label><input id="date" type="date" className="text-input date-input" value={formData.date} onChange={event => setFormData({ ...formData, date: event.target.value })} /></div>
           <div className="field-group"><label className="field-label" htmlFor="receipt">受付番号</label><input id="receipt" type="text" className="text-input" placeholder="例）12345" value={formData.receiptNumber} onChange={event => setFormData({ ...formData, receiptNumber: event.target.value })} /></div>
-          {[['beforeWeight', '使用前重量 (kg)', 'before'], ['afterWeight', '使用後重量 (kg)', 'after']].map(([field, label, tone]) => <div className={`weight-box ${tone}`} key={field}><label className="field-label">{label}</label><div className="weight-display">{formData[field] ? <span className={`weight-value ${tone}`}>{formData[field]}</span> : <span className="weight-placeholder">待機中...</span>}</div><input aria-label={`${label}を手入力`} className="weight-edit" type="number" inputMode="decimal" min="0" max="200" step="0.001" placeholder="認識結果を確認・修正" value={formData[field]} onChange={event => setFormData({ ...formData, [field]: event.target.value })} /><div className="btn-row"><label className="btn btn-camera">📷 カメラ<input type="file" accept="image/*" capture="environment" onChange={event => handleFile(event, field)} /></label><label className="btn btn-library">📁 ライブラリ<input type="file" accept="image/*" onChange={event => handleFile(event, field)} /></label></div></div>)}
+          {[['beforeWeight', '使用前重量 (kg)', 'before'], ['afterWeight', '使用後重量 (kg)', 'after']].map(([field, label, tone]) => <div className={`weight-box ${tone}`} key={field}>
+            <label className="field-label">{label}</label><div className="weight-display">{formData[field] ? <span className={`weight-value ${tone}`}>{formData[field]}</span> : <span className="weight-placeholder">待機中...</span>}</div>
+            <input aria-label={`${label}を手入力`} className="weight-edit" type="number" inputMode="decimal" min="0" max="200" step="0.001" placeholder="認識結果を確認・修正" value={formData[field]} onChange={event => setFormData({ ...formData, [field]: event.target.value })} />
+            <div className="btn-row"><label className="btn btn-camera">📷 カメラ<input type="file" accept="image/*" capture="environment" onChange={event => handleFile(event, field)} /></label><label className="btn btn-library">📁 ライブラリ<input type="file" accept="image/*" onChange={event => handleFile(event, field)} /></label></div>
+            {lcdPreviews[field] && <figure className="lcd-preview"><figcaption>読み取り対象（緑LCDのみ）</figcaption><img src={lcdPreviews[field]} alt="切り出した計量器の緑LCD表示部" /></figure>}
+          </div>)}
           <button className="btn-save" onClick={handleSave} disabled={ocrProcessing}>✓ 保存する</button>
         </section>{savedRecords.length > 0 && <section className="card"><h2>記録履歴 ({savedRecords.length})</h2>{savedRecords.map(record => <article className="record" key={record.id}><div className="record-top"><span className="record-num">{record.receiptNumber}</span><span><span className="record-date">{record.date}</span><button className="del-btn" aria-label={`${record.receiptNumber}を削除`} onClick={() => handleDelete(record.id)}>🗑</button></span></div><div className="record-grid"><div><div className="lbl">使用前</div><div className="val before">{record.beforeWeight} kg</div></div><div><div className="lbl">使用後</div><div className="val after">{record.afterWeight} kg</div></div></div><div className="record-usage">使用量: <strong>{(parseFloat(record.beforeWeight) - parseFloat(record.afterWeight)).toFixed(3)}</strong> kg</div></article>)}</section>}</main>
-        {showOverlay && <div className="overlay" role="status" aria-live="polite"><div className="overlay-inner">{ocrProcessing ? <><div className="overlay-icon spin">🔄</div><div className="overlay-text" style={{ color: '#fde047' }}>認識中...</div></> : <><div className="overlay-icon">✓</div><div className="overlay-text" style={{ color: '#86efac' }}>完了！</div></>}</div></div>}
+        {showOverlay && <div className="overlay" role="status" aria-live="polite"><div className="overlay-inner">{ocrProcessing ? <><div className="overlay-icon spin">🔄</div><div className="overlay-text" style={{ color: '#fde047' }}>表示部を切り出し中...</div></> : <><div className="overlay-icon">✓</div><div className="overlay-text" style={{ color: '#86efac' }}>完了！</div></>}</div></div>}
       </div>;
     }
     ReactDOM.createRoot(document.getElementById('root')).render(<App />);

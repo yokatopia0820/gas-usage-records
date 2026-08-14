@@ -46,3 +46,10 @@ test('findDisplayBounds selects the bright green rectangular LCD instead of a la
   ]);
   assert.deepEqual(helpers.findDisplayBounds(image), { x: 28, y: 58, width: 64, height: 24 });
 });
+
+test('displayCropRect keeps only the detected LCD with a small safety margin', () => {
+  assert.deepEqual(
+    helpers.displayCropRect({ x: 28, y: 58, width: 64, height: 24 }, 120, 100),
+    { x: 25, y: 57, width: 70, height: 26 },
+  );
+});

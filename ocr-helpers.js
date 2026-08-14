@@ -33,6 +33,18 @@
     return best && { x: best.x, y: best.y, width: best.width, height: best.height };
   }
 
+  // Keep the crop tight: recognition must never see labels, barcodes, or buttons.
+  function displayCropRect(bounds, sourceWidth, sourceHeight, paddingRatio = .05) {
+    if (!bounds || !sourceWidth || !sourceHeight) return null;
+    const paddingX = Math.max(1, Math.round(bounds.width * paddingRatio));
+    const paddingY = Math.max(1, Math.round(bounds.height * paddingRatio));
+    const x = Math.max(0, bounds.x - paddingX);
+    const y = Math.max(0, bounds.y - paddingY);
+    const right = Math.min(sourceWidth, bounds.x + bounds.width + paddingX);
+    const bottom = Math.min(sourceHeight, bounds.y + bounds.height + paddingY);
+    return { x, y, width: right - x, height: bottom - y };
+  }
+
   function decodeSevenSegment(imageData, debug = false, darkness = .42) {
     const { width, height, data } = imageData; const total = width * height;
     const brightness = new Uint8Array(total); let min = 255; let max = 0;
@@ -88,6 +100,7 @@
 
   root.selectWeightFromText = selectWeightFromText;
   root.findDisplayBounds = findDisplayBounds;
+  root.displayCropRect = displayCropRect;
   root.decodeSevenSegment = decodeSevenSegment;
-  if (typeof module !== 'undefined') module.exports = { selectWeightFromText, findDisplayBounds, decodeSevenSegment };
+  if (typeof module !== 'undefined') module.exports = { selectWeightFromText, findDisplayBounds, displayCropRect, decodeSevenSegment };
 })(typeof globalThis === 'undefined' ? this : globalThis);
