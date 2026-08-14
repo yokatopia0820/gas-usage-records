@@ -53,3 +53,14 @@ test('displayCropRect keeps only the detected LCD with a small safety margin', (
     { x: 25, y: 57, width: 70, height: 26 },
   );
 });
+
+test('seven-segment matching rejects an ambiguous binary pattern and uses segment strength to select 3', () => {
+  assert.equal(helpers.closestSevenSegmentDigit('abcdeg'), null);
+  assert.equal(helpers.closestSevenSegmentDigit('ab'), null);
+  assert.equal(helpers.bestDigitFromSegmentScores({ a: .65, b: .58, c: .58, d: .71, e: .18, f: .10, g: .54 }), '3');
+});
+
+test('selectStableWeight returns only a reading confirmed by multiple thresholds', () => {
+  assert.equal(helpers.selectStableWeight(['13.174', '13.174', null, '11.074']), '13.174');
+  assert.equal(helpers.selectStableWeight(['10.450', '10.458', null]), null);
+});

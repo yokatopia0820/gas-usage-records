@@ -45,6 +45,46 @@
     return { x, y, width: right - x, height: bottom - y };
   }
 
+  const sevenSegmentPatterns = { 0: 'abcdef', 1: 'bc', 2: 'abdeg', 3: 'abcdg', 4: 'bcfg', 5: 'acdfg', 6: 'acdefg', 7: 'abc', 8: 'abcdefg', 9: 'abcdfg' };
+
+  function closestSevenSegmentDigit(on) {
+    if (on === '1') return { digit: '1', distance: 0 };
+    if (!on || on.length < 3) return null;
+    const active = new Set(on);
+    const candidates = Object.entries(sevenSegmentPatterns).map(([digit, pattern]) => {
+      const expected = new Set(pattern);
+      let distance = 0;
+      for (const segment of active) if (!expected.has(segment)) distance++;
+      for (const segment of expected) if (!active.has(segment)) distance++;
+      return { digit, distance };
+    }).sort((a, b) => a.distance - b.distance);
+    if (candidates[0].distance > 1 || candidates[0].distance === candidates[1].distance) return null;
+    return candidates[0];
+  }
+
+  function bestDigitFromSegmentScores(scores) {
+    const candidates = Object.entries(sevenSegmentPatterns).map(([digit, pattern]) => {
+      const expected = new Set(pattern);
+      const all = Object.keys(scores);
+      const onAverage = [...expected].reduce((sum, segment) => sum + scores[segment], 0) / expected.size;
+      const off = all.filter(segment => !expected.has(segment));
+      const offAverage = off.length ? off.reduce((sum, segment) => sum + scores[segment], 0) / off.length : 0;
+      return { digit, score: onAverage - offAverage * .7 };
+    }).sort((a, b) => b.score - a.score);
+    return candidates[0].score - candidates[1].score >= .03 ? candidates[0].digit : null;
+  }
+
+  function selectStableWeight(readings) {
+    const counts = new Map();
+    for (const reading of readings) if (/^\d{1,2}\.\d{3}$/.test(reading || '')) counts.set(reading, (counts.get(reading) || 0) + 1);
+    const ranked = [...counts.entries()].sort((left, right) => right[1] - left[1]);
+    return ranked[0] && ranked[0][1] >= 2 && (!ranked[1] || ranked[0][1] > ranked[1][1]) ? ranked[0][0] : null;
+  }
+
+  function decodeScaleWeight(imageData) {
+    return selectStableWeight([.30, .32, .34, .36, .38, .40].map(threshold => decodeSevenSegment(imageData, false, threshold)));
+  }
+
   function decodeSevenSegment(imageData, debug = false, darkness = .42) {
     const { width, height, data } = imageData; const total = width * height;
     const brightness = new Uint8Array(total); let min = 255; let max = 0;
@@ -54,7 +94,6 @@
     for (let index = 0; index < total; index++) dark[index] = brightness[index] < cutoff ? 1 : 0;
     const groups = []; let start = -1;
     for (let x = 0; x < width; x++) { let count = 0; for (let y = 0; y < height; y++) count += dark[y * width + x]; const active = count >= Math.max(2, height * .02); if (active && start < 0) start = x; if ((!active || x === width - 1) && start >= 0) { groups.push({ left: start, right: active && x === width - 1 ? x : x - 1 }); start = -1; } }
-    const patterns = { abcdef: '0', bc: '1', abdeg: '2', abcdg: '3', bcfg: '4', abcfg: '4', acdfg: '5', acdefg: '6', abc: '7', abcdefg: '8', abcdfg: '9' };
     const parts = []; const detail = [];
     for (const group of groups) {
       let top = height; let bottom = 0; let pixels = 0;
@@ -67,7 +106,7 @@
       const regions = { a: [.18, 0, .82, .20], b: [.58, .12, 1, .48], c: [.58, .52, 1, .88], d: [.18, .80, .82, 1], e: [0, .52, .42, .88], f: [0, .12, .42, .48], g: [.18, .40, .82, .60] };
       const scores = Object.fromEntries(Object.entries(regions).map(([name, region]) => [name, density(...region)]));
       const on = Object.entries(scores).filter(([name, score]) => score > (name === 'a' || name === 'd' || name === 'g' ? .4 : .16)).map(([name]) => name).join('');
-      const digit = patterns[on] || null; if (digit) parts.push(digit); detail.push({ ...group, on, digit, scores });
+      const closest = closestSevenSegmentDigit(on); const digit = closest?.digit || (on.length >= 4 ? bestDigitFromSegmentScores(scores) : null); if (digit) parts.push(digit); detail.push({ ...group, on, digit, distance: closest?.distance ?? null, scores });
     }
     const value = parts.join('').replace(/^\.+|\.+$/g, '');
     const digits = parts.filter(part => /^\d$/.test(part)).join('');
@@ -101,6 +140,10 @@
   root.selectWeightFromText = selectWeightFromText;
   root.findDisplayBounds = findDisplayBounds;
   root.displayCropRect = displayCropRect;
+  root.closestSevenSegmentDigit = closestSevenSegmentDigit;
+  root.bestDigitFromSegmentScores = bestDigitFromSegmentScores;
+  root.selectStableWeight = selectStableWeight;
+  root.decodeScaleWeight = decodeScaleWeight;
   root.decodeSevenSegment = decodeSevenSegment;
-  if (typeof module !== 'undefined') module.exports = { selectWeightFromText, findDisplayBounds, displayCropRect, decodeSevenSegment };
+  if (typeof module !== 'undefined') module.exports = { selectWeightFromText, findDisplayBounds, displayCropRect, closestSevenSegmentDigit, bestDigitFromSegmentScores, selectStableWeight, decodeScaleWeight, decodeSevenSegment };
 })(typeof globalThis === 'undefined' ? this : globalThis);

@@ -59,7 +59,7 @@
       async function prepareScaleDisplay(file) {
         const image = await openImage(file);
         const probe = document.createElement('canvas');
-        const probeWidth = Math.min(420, image.width);
+        const probeWidth = Math.min(1200, image.width);
         const probeHeight = Math.round(image.height * probeWidth / image.width);
         probe.width = probeWidth; probe.height = probeHeight;
         const probeContext = probe.getContext('2d', { willReadFrequently: true });
@@ -68,7 +68,7 @@
         const crop = displayCropRect(bounds, probeWidth, probeHeight);
         if (!crop) { image.close?.(); return { foundDisplay: false }; }
 
-        const localWeight = decodeSevenSegment(probeContext.getImageData(bounds.x, bounds.y, bounds.width, bounds.height));
+        const localWeight = decodeScaleWeight(probeContext.getImageData(bounds.x, bounds.y, bounds.width, bounds.height));
         const sourceX = crop.x * image.width / probeWidth;
         const sourceY = crop.y * image.height / probeHeight;
         const sourceWidth = crop.width * image.width / probeWidth;
@@ -95,6 +95,7 @@
           previewUrlsRef.current[field] = previewUrl;
           if (previousUrl) URL.revokeObjectURL(previousUrl);
           setLcdPreviews(previous => ({ ...previous, [field]: previewUrl }));
+          if (prepared.localWeight) setFormData(previous => ({ ...previous, [field]: prepared.localWeight }));
         } catch (error) { alert('画像処理エラー: ' + error.message); }
         setOcrProcessing(false); setShowOverlay(false);
       }
