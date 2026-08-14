@@ -51,34 +51,32 @@
       async function prepareScaleDisplay(file) {
         const image = await openImage(file);
         const probe = document.createElement('canvas');
-        const probeWidth = Math.min(800, image.width);
+        const probeWidth = Math.min(420, image.width);
         const probeHeight = Math.round(image.height * probeWidth / image.width);
         probe.width = probeWidth; probe.height = probeHeight;
         const probeContext = probe.getContext('2d', { willReadFrequently: true });
         probeContext.drawImage(image, 0, 0, probeWidth, probeHeight);
-        const pixels = probeContext.getImageData(0, 0, probeWidth, probeHeight).data;
-        let left = probeWidth, top = probeHeight, right = 0, bottom = 0, count = 0;
-        for (let y = Math.floor(probeHeight * .1); y < probeHeight * .9; y += 4) for (let x = Math.floor(probeWidth * .05); x < probeWidth * .95; x += 4) {
-          const offset = (y * probeWidth + x) * 4; const red = pixels[offset]; const green = pixels[offset + 1]; const blue = pixels[offset + 2];
-          if (green > red * 1.2 && green > blue * 1.15 && green > 55) { left = Math.min(left, x); top = Math.min(top, y); right = Math.max(right, x); bottom = Math.max(bottom, y); count++; }
-        }
-        const foundDisplay = count > 50 && right - left > probeWidth * .08 && bottom - top > probeHeight * .03;
-        const pad = foundDisplay ? Math.max(right - left, bottom - top) * .22 : 0;
-        const sourceX = foundDisplay ? Math.max(0, (left - pad) * image.width / probeWidth) : 0;
-        const sourceY = foundDisplay ? Math.max(0, (top - pad) * image.height / probeHeight) : 0;
-        const sourceWidth = foundDisplay ? Math.min(image.width - sourceX, (right - left + pad * 2) * image.width / probeWidth) : image.width;
-        const sourceHeight = foundDisplay ? Math.min(image.height - sourceY, (bottom - top + pad * 2) * image.height / probeHeight) : image.height;
+        const probeImage = probeContext.getImageData(0, 0, probeWidth, probeHeight);
+        const bounds = findDisplayBounds(probeImage);
+        const foundDisplay = Boolean(bounds);
+        const localWeight = foundDisplay ? decodeSevenSegment(probeContext.getImageData(bounds.x, bounds.y, bounds.width, bounds.height)) : null;
+        const pad = foundDisplay ? Math.max(bounds.width, bounds.height) * .12 : 0;
+        const sourceX = foundDisplay ? Math.max(0, (bounds.x - pad) * image.width / probeWidth) : 0;
+        const sourceY = foundDisplay ? Math.max(0, (bounds.y - pad) * image.height / probeHeight) : 0;
+        const sourceWidth = foundDisplay ? Math.min(image.width - sourceX, (bounds.width + pad * 2) * image.width / probeWidth) : image.width;
+        const sourceHeight = foundDisplay ? Math.min(image.height - sourceY, (bounds.height + pad * 2) * image.height / probeHeight) : image.height;
         const scale = Math.min(3, 1600 / sourceWidth);
         const output = document.createElement('canvas'); output.width = Math.max(1, Math.round(sourceWidth * scale)); output.height = Math.max(1, Math.round(sourceHeight * scale));
         const context = output.getContext('2d'); context.filter = 'grayscale(1) contrast(240%)'; context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, output.width, output.height);
         image.close?.();
-        return new Promise(resolve => output.toBlob(blob => resolve(blob || file), 'image/jpeg', .92));
+        return new Promise(resolve => output.toBlob(blob => resolve({ image: blob || file, localWeight }), 'image/jpeg', .92));
       }
       async function runOCR(file) {
         try {
           const form = new FormData();
-          const displayImage = await prepareScaleDisplay(file);
-          form.append('file', displayImage, 'scale-display.jpg'); form.append('language', 'eng'); form.append('isOverlayRequired', 'false'); form.append('OCREngine', '2'); form.append('scale', 'true'); form.append('isTable', 'false');
+          const prepared = await prepareScaleDisplay(file);
+          if (prepared.localWeight) return prepared.localWeight;
+          form.append('file', prepared.image, 'scale-display.jpg'); form.append('language', 'eng'); form.append('isOverlayRequired', 'false'); form.append('OCREngine', '2'); form.append('scale', 'true'); form.append('isTable', 'false');
           const res = await fetch('https://api.ocr.space/parse/image', { method: 'POST', headers: { apikey: 'helloworld' }, body: form });
           if (!res.ok) throw new Error(`OCRサービスが応答しませんでした (${res.status})`);
           const data = await res.json();

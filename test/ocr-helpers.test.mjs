@@ -4,6 +4,25 @@ import helpers from '../ocr-helpers.js';
 
 const { selectWeightFromText } = helpers;
 
+function imageWithRegions(width, height, regions) {
+  const data = new Uint8ClampedArray(width * height * 4).fill(255);
+  for (let index = 3; index < data.length; index += 4) data[index] = 255;
+  for (const region of regions) for (let y = region.y; y < region.y + region.height; y++) for (let x = region.x; x < region.x + region.width; x++) {
+    const offset = (y * width + x) * 4;
+    data[offset] = region.color[0]; data[offset + 1] = region.color[1]; data[offset + 2] = region.color[2];
+  }
+  return { width, height, data };
+}
+
+function sevenSegmentImage(value) {
+  const width = value.length * 28; const height = 54; const data = new Uint8ClampedArray(width * height * 4);
+  for (let index = 0; index < data.length; index += 4) { data[index] = 30; data[index + 1] = 215; data[index + 2] = 55; data[index + 3] = 255; }
+  const segments = { 0: 'abcdef', 1: 'bc', 2: 'abdeg', 3: 'abcdg', 4: 'bcfg', 5: 'acdfg', 6: 'acdefg', 7: 'abc', 8: 'abcdefg', 9: 'abcdfg' };
+  const fill = (x, y, w, h) => { for (let row = y; row < y + h; row++) for (let column = x; column < x + w; column++) { const offset = (row * width + column) * 4; data[offset] = data[offset + 1] = data[offset + 2] = 20; } };
+  [...value].forEach((character, index) => { const x = index * 28 + 4; if (character === '.') return fill(x + 3, 45, 5, 5); const on = segments[character]; if (!on) return; if (on.includes('a')) fill(x + 5, 4, 14, 4); if (on.includes('b')) fill(x + 19, 8, 4, 16); if (on.includes('c')) fill(x + 19, 30, 4, 16); if (on.includes('d')) fill(x + 5, 46, 14, 4); if (on.includes('e')) fill(x + 1, 30, 4, 16); if (on.includes('f')) fill(x + 1, 8, 4, 16); if (on.includes('g')) fill(x + 5, 25, 14, 4); });
+  return { width, height, data };
+}
+
 test('selectWeightFromText prefers a plausible decimal weight over a longer date or model number', () => {
   assert.equal(selectWeightFromText('BOMATA 20260814\n13.174 kg\n'), '13.174');
 });
@@ -12,6 +31,22 @@ test('selectWeightFromText accepts a comma decimal returned by OCR', () => {
   assert.equal(selectWeightFromText('NET 6,250 kg'), '6.250');
 });
 
+test('selectWeightFromText restores the fixed three-decimal scale format when OCR drops the decimal point', () => {
+  assert.equal(selectWeightFromText('13017'), '13.017');
+});
+
 test('selectWeightFromText rejects unreasonably large numeric strings', () => {
   assert.equal(selectWeightFromText('model 20260814 serial 99887766'), null);
+});
+
+test('findDisplayBounds selects the bright green rectangular LCD instead of a large leafy green area', () => {
+  const image = imageWithRegions(120, 100, [
+    { x: 0, y: 0, width: 100, height: 30, color: [48, 96, 32] },
+    { x: 28, y: 58, width: 64, height: 24, color: [35, 210, 55] },
+  ]);
+  assert.deepEqual(helpers.findDisplayBounds(image), { x: 28, y: 58, width: 64, height: 24 });
+});
+
+test('decodeSevenSegment reads a scale display with a decimal point', () => {
+  assert.equal(helpers.decodeSevenSegment(sevenSegmentImage('13.174')), '13.174');
 });
