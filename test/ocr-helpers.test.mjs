@@ -64,3 +64,8 @@ test('selectStableWeight returns only a reading confirmed by multiple thresholds
   assert.equal(helpers.selectStableWeight(['13.174', '13.174', null, '11.074']), '13.174');
   assert.equal(helpers.selectStableWeight(['10.450', '10.458', null]), null);
 });
+
+test('selectPreferredWeight uses the calibrated reading before the stability fallback', () => {
+  assert.equal(helpers.selectPreferredWeight(['13.171', null, '13.174', null, '11.074', null]), '13.174');
+  assert.equal(helpers.selectPreferredWeight([null, null, null, '10.450', '10.458', null]), null);
+});

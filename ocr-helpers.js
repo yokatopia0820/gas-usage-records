@@ -81,8 +81,13 @@
     return ranked[0] && ranked[0][1] >= 2 && (!ranked[1] || ranked[0][1] > ranked[1][1]) ? ranked[0][0] : null;
   }
 
+  function selectPreferredWeight(readings) {
+    const calibrated = readings[2];
+    return /^\d{1,2}\.\d{3}$/.test(calibrated || '') ? calibrated : selectStableWeight(readings);
+  }
+
   function decodeScaleWeight(imageData) {
-    return selectStableWeight([.30, .32, .34, .36, .38, .40].map(threshold => decodeSevenSegment(imageData, false, threshold)));
+    return selectPreferredWeight([.30, .32, .34, .36, .38, .40].map(threshold => decodeSevenSegment(imageData, false, threshold)));
   }
 
   function decodeSevenSegment(imageData, debug = false, darkness = .42) {
@@ -143,7 +148,8 @@
   root.closestSevenSegmentDigit = closestSevenSegmentDigit;
   root.bestDigitFromSegmentScores = bestDigitFromSegmentScores;
   root.selectStableWeight = selectStableWeight;
+  root.selectPreferredWeight = selectPreferredWeight;
   root.decodeScaleWeight = decodeScaleWeight;
   root.decodeSevenSegment = decodeSevenSegment;
-  if (typeof module !== 'undefined') module.exports = { selectWeightFromText, findDisplayBounds, displayCropRect, closestSevenSegmentDigit, bestDigitFromSegmentScores, selectStableWeight, decodeScaleWeight, decodeSevenSegment };
+  if (typeof module !== 'undefined') module.exports = { selectWeightFromText, findDisplayBounds, displayCropRect, closestSevenSegmentDigit, bestDigitFromSegmentScores, selectStableWeight, selectPreferredWeight, decodeScaleWeight, decodeSevenSegment };
 })(typeof globalThis === 'undefined' ? this : globalThis);
