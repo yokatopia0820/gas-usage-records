@@ -27,7 +27,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
-  <script src="ocr-helpers.js?v=b6b8d92"></script>
+  <script src="ocr-helpers.js?v=angle1"></script>
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
     const STORAGE_KEY = 'gasMeterRecords';
@@ -68,7 +68,13 @@
         const crop = displayCropRect(bounds, probeWidth, probeHeight);
         if (!crop) { image.close?.(); return { foundDisplay: false }; }
 
-        const localWeight = decodeScaleWeight(probeContext.getImageData(bounds.x, bounds.y, bounds.width, bounds.height));
+        const angle = estimateDisplayAngle(probeContext.getImageData(0, 0, probeWidth, probeHeight), bounds);
+        const cosine = Math.abs(Math.cos(angle)); const sine = Math.abs(Math.sin(angle));
+        const leveled = document.createElement('canvas'); leveled.width = Math.ceil(bounds.width * cosine + bounds.height * sine); leveled.height = Math.ceil(bounds.width * sine + bounds.height * cosine);
+        const leveledContext = leveled.getContext('2d', { willReadFrequently: true });
+        leveledContext.translate(leveled.width / 2, leveled.height / 2); leveledContext.rotate(-angle);
+        leveledContext.drawImage(probe, bounds.x, bounds.y, bounds.width, bounds.height, -bounds.width / 2, -bounds.height / 2, bounds.width, bounds.height);
+        const localWeight = decodeScaleWeight(leveledContext.getImageData(0, 0, leveled.width, leveled.height));
         const sourceX = crop.x * image.width / probeWidth;
         const sourceY = crop.y * image.height / probeHeight;
         const sourceWidth = crop.width * image.width / probeWidth;

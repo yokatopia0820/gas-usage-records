@@ -33,6 +33,24 @@
     return best && { x: best.x, y: best.y, width: best.width, height: best.height };
   }
 
+  function estimateDisplayAngle(imageData, bounds) {
+    if (!bounds) return 0;
+    const { width, data } = imageData; let count = 0; let sumX = 0; let sumY = 0;
+    for (let y = bounds.y; y < bounds.y + bounds.height; y++) for (let x = bounds.x; x < bounds.x + bounds.width; x++) {
+      const offset = (y * width + x) * 4; const red = data[offset]; const green = data[offset + 1]; const blue = data[offset + 2];
+      if (!(green >= 105 && green - red >= 35 && green - blue >= 20 && green > red * 1.25 && green > blue * 1.18)) continue;
+      count++; sumX += x; sumY += y;
+    }
+    if (count < 2) return 0;
+    const meanX = sumX / count; const meanY = sumY / count; let xx = 0; let yy = 0; let xy = 0;
+    for (let y = bounds.y; y < bounds.y + bounds.height; y++) for (let x = bounds.x; x < bounds.x + bounds.width; x++) {
+      const offset = (y * width + x) * 4; const red = data[offset]; const green = data[offset + 1]; const blue = data[offset + 2];
+      if (!(green >= 105 && green - red >= 35 && green - blue >= 20 && green > red * 1.25 && green > blue * 1.18)) continue;
+      const dx = x - meanX; const dy = y - meanY; xx += dx * dx; yy += dy * dy; xy += dx * dy;
+    }
+    return .5 * Math.atan2(2 * xy, xx - yy);
+  }
+
   // Keep the crop tight: recognition must never see labels, barcodes, or buttons.
   function displayCropRect(bounds, sourceWidth, sourceHeight, paddingRatio = .05) {
     if (!bounds || !sourceWidth || !sourceHeight) return null;
@@ -144,6 +162,7 @@
 
   root.selectWeightFromText = selectWeightFromText;
   root.findDisplayBounds = findDisplayBounds;
+  root.estimateDisplayAngle = estimateDisplayAngle;
   root.displayCropRect = displayCropRect;
   root.closestSevenSegmentDigit = closestSevenSegmentDigit;
   root.bestDigitFromSegmentScores = bestDigitFromSegmentScores;
@@ -151,5 +170,5 @@
   root.selectPreferredWeight = selectPreferredWeight;
   root.decodeScaleWeight = decodeScaleWeight;
   root.decodeSevenSegment = decodeSevenSegment;
-  if (typeof module !== 'undefined') module.exports = { selectWeightFromText, findDisplayBounds, displayCropRect, closestSevenSegmentDigit, bestDigitFromSegmentScores, selectStableWeight, selectPreferredWeight, decodeScaleWeight, decodeSevenSegment };
+  if (typeof module !== 'undefined') module.exports = { selectWeightFromText, findDisplayBounds, estimateDisplayAngle, displayCropRect, closestSevenSegmentDigit, bestDigitFromSegmentScores, selectStableWeight, selectPreferredWeight, decodeScaleWeight, decodeSevenSegment };
 })(typeof globalThis === 'undefined' ? this : globalThis);

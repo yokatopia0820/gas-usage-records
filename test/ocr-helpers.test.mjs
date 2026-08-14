@@ -47,6 +47,11 @@ test('findDisplayBounds selects the bright green rectangular LCD instead of a la
   assert.deepEqual(helpers.findDisplayBounds(image), { x: 28, y: 58, width: 64, height: 24 });
 });
 
+test('estimateDisplayAngle reports an axis-aligned LCD as level', () => {
+  const image = imageWithRegions(120, 100, [{ x: 28, y: 58, width: 64, height: 24, color: [35, 210, 55] }]);
+  assert.ok(Math.abs(helpers.estimateDisplayAngle(image, { x: 28, y: 58, width: 64, height: 24 })) < .001);
+});
+
 test('displayCropRect keeps only the detected LCD with a small safety margin', () => {
   assert.deepEqual(
     helpers.displayCropRect({ x: 28, y: 58, width: 64, height: 24 }, 120, 100),
