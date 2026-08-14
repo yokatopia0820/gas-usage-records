@@ -64,7 +64,8 @@
         probe.width = probeWidth; probe.height = probeHeight;
         const probeContext = probe.getContext('2d', { willReadFrequently: true });
         probeContext.drawImage(image, 0, 0, probeWidth, probeHeight);
-        const bounds = findDisplayBounds(probeContext.getImageData(0, 0, probeWidth, probeHeight));
+        const probeImage = probeContext.getImageData(0, 0, probeWidth, probeHeight);
+        const bounds = findDisplayBounds(probeImage);
         const crop = displayCropRect(bounds, probeWidth, probeHeight);
         if (!crop) { image.close?.(); return { foundDisplay: false }; }
 
