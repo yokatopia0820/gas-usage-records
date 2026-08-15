@@ -113,8 +113,12 @@
           const preview = document.createElement('canvas'); preview.width = imageData.width; preview.height = imageData.height; preview.getContext('2d').putImageData(imageData, 0, 0);
           const previousUrl = previewUrlsRef.current[field]; const previewUrl = preview.toDataURL('image/jpeg', .92); previewUrlsRef.current[field] = previewUrl; if (previousUrl?.startsWith('blob:')) URL.revokeObjectURL(previousUrl);
           setLcdPreviews(previous => ({ ...previous, [field]: previewUrl }));
+          if (result.conf < BomataOCR.CONFIDENCE_WARN) {
+            setConfidenceNotes(notes => ({ ...notes, [field]: `信頼度 ${(result.conf * 100).toFixed(0)}%：信頼度が低いため、数値は入力しません。黄色い枠を緑LCDの数字だけへ合わせて、もう一度読み取ってください。` }));
+            return;
+          }
           setFormData(previous => ({ ...previous, [field]: result.value.toFixed(3) }));
-          setConfidenceNotes(notes => ({ ...notes, [field]: result.conf < BomataOCR.CONFIDENCE_WARN ? `信頼度 ${(result.conf * 100).toFixed(0)}%：数字を確認・修正してください。` : '' }));
+          setConfidenceNotes(notes => ({ ...notes, [field]: '' }));
           setCropEditors(editors => ({ ...editors, [field]: null }));
         } catch (error) { alert('読み取りエラー: ' + error.message); }
         setOcrProcessing(false); setShowOverlay(false);
