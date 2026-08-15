@@ -17,6 +17,7 @@
     .weight-display { background: #fff; border-radius: 8px; padding: 12px; margin-bottom: 12px; text-align: center; min-height: 56px; display: flex; align-items: center; justify-content: center; }.weight-value { font-size: 30px; font-weight: bold; }.weight-value.before { color: #2563eb; }.weight-value.after { color: #ea580c; }.weight-placeholder { color: #6b7280; }
     .btn-row { display: flex; gap: 8px; }.btn { flex: 1; min-height: 48px; padding: 12px; font-size: 15px; font-weight: 600; color: #fff; border: 0; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; }.btn:active, .btn-save:active { transform: scale(.98); }.btn-camera { background: #3b82f6; }.btn-library { background: #22c55e; }.btn-save { width: 100%; min-height: 56px; padding: 16px; font-size: 18px; font-weight: bold; color: #fff; background: linear-gradient(to right, #22c55e, #16a34a); border: 0; border-radius: 8px; cursor: pointer; }.btn-save:disabled { background: #9ca3af; } input[type=file] { display: none; }
     .lcd-preview { margin-top: 14px; border: 2px solid #86efac; border-radius: 8px; background: #f0fdf4; padding: 10px; }.lcd-preview figcaption { font-size: 13px; font-weight: 700; color: #166534; margin-bottom: 8px; }.lcd-preview img { display: block; width: 100%; max-height: 150px; object-fit: contain; border-radius: 4px; background: #111827; }
+    .crop-editor { margin-top: 14px; border: 2px solid #60a5fa; border-radius: 12px; background: #eff6ff; padding: 10px; }.crop-editor h3 { font-size: 14px; margin-bottom: 5px; }.crop-editor p { font-size: 12px; color: #475569; margin-bottom: 10px; line-height: 1.45; }.crop-stage { position: relative; width: 100%; touch-action: none; user-select: none; background: #0f172a; overflow: hidden; border-radius: 7px; }.crop-stage img { width: 100%; display: block; max-height: 360px; object-fit: contain; pointer-events: none; }.crop-frame { position: absolute; border: 3px solid #facc15; background: rgba(250,204,21,.10); box-shadow: 0 0 0 200vmax rgba(15,23,42,.38); touch-action: none; cursor: move; }.crop-handle { position: absolute; width: 28px; height: 28px; right: -15px; bottom: -15px; border-radius: 50%; background: #facc15; border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); }.btn-read { width: 100%; margin-top: 12px; min-height: 48px; border: 0; border-radius: 8px; color: #fff; background: #2563eb; font-weight: 700; font-size: 16px; }.confidence-note { margin-top: 8px; font-size: 12px; color: #92400e; background: #fef3c7; padding: 8px; border-radius: 6px; }
     .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.9); display: flex; align-items: center; justify-content: center; z-index: 50; }.overlay-inner { text-align: center; }.overlay-icon { font-size: 56px; margin-bottom: 16px; }.overlay-text { font-size: 18px; font-weight: 600; }.spin { animation: pulse 1s infinite; } @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
     .record { border-left: 4px solid #3b82f6; background: #eff6ff; padding: 16px; border-radius: 6px; margin-bottom: 12px; }.record-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }.record-num { font-weight: 600; }.record-date, .lbl { color: #6b7280; }.record-date { font-size: 12px; }.record-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 14px; }.record-grid .val { font-size: 18px; font-weight: bold; }.val.before { color: #2563eb; }.val.after { color: #ea580c; }.record-usage { margin-top: 8px; font-size: 12px; background: #fff; padding: 8px; border-radius: 4px; }.del-btn { background: none; border: 0; color: #dc2626; cursor: pointer; font-size: 14px; padding: 4px; }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
@@ -27,6 +28,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
+  <script src="bomata-ocr.js?v=1"></script>
   <script src="ocr-helpers.js?v=adaptive1"></script>
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
@@ -40,11 +42,15 @@
       const [showOverlay, setShowOverlay] = useState(false);
       const [ocrProcessing, setOcrProcessing] = useState(false);
       const [lcdPreviews, setLcdPreviews] = useState({ beforeWeight: '', afterWeight: '' });
+      const [cropEditors, setCropEditors] = useState({});
+      const [confidenceNotes, setConfidenceNotes] = useState({});
       const previewUrlsRef = useRef({});
+      const dragRef = useRef(null);
 
       useEffect(() => { try { const saved = localStorage.getItem(STORAGE_KEY); if (saved) setSavedRecords(JSON.parse(saved)); } catch { localStorage.removeItem(STORAGE_KEY); } }, []);
       useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(savedRecords)); }, [savedRecords]);
       useEffect(() => () => Object.values(previewUrlsRef.current).forEach(url => URL.revokeObjectURL(url)), []);
+      useEffect(() => { BomataOCR.init().catch(() => alert('OCRエンジンの準備に失敗しました。')); }, []);
 
       async function openImage(file) {
         if ('createImageBitmap' in window) return createImageBitmap(file);
@@ -56,79 +62,61 @@
         });
       }
 
-      async function prepareScaleDisplay(file) {
-        const image = await openImage(file);
-        const probe = document.createElement('canvas');
-        const probeWidth = Math.min(1200, image.width);
-        const probeHeight = Math.round(image.height * probeWidth / image.width);
-        probe.width = probeWidth; probe.height = probeHeight;
-        const probeContext = probe.getContext('2d', { willReadFrequently: true });
-        probeContext.drawImage(image, 0, 0, probeWidth, probeHeight);
-        const probeImage = probeContext.getImageData(0, 0, probeWidth, probeHeight);
-        const bounds = findDisplayBounds(probeImage);
-        const crop = displayCropRect(bounds, probeWidth, probeHeight);
-        if (!crop) { image.close?.(); return { foundDisplay: false }; }
-
-        const corners = findDisplayCorners(probeImage, bounds);
-        const distance = (left, right) => Math.hypot(right.x - left.x, right.y - left.y);
-        const leveled = document.createElement('canvas'); leveled.width = Math.round(Math.max(distance(corners.topLeft, corners.topRight), distance(corners.bottomLeft, corners.bottomRight))); leveled.height = Math.round(Math.max(distance(corners.topLeft, corners.bottomLeft), distance(corners.topRight, corners.bottomRight)));
-        const leveledContext = leveled.getContext('2d', { willReadFrequently: true }); const leveledImage = leveledContext.createImageData(leveled.width, leveled.height);
-        for (let y = 0; y < leveled.height; y++) for (let x = 0; x < leveled.width; x++) {
-          const u = x / Math.max(1, leveled.width - 1); const v = y / Math.max(1, leveled.height - 1);
-          const sourceX = Math.round((1-u)*(1-v)*corners.topLeft.x + u*(1-v)*corners.topRight.x + u*v*corners.bottomRight.x + (1-u)*v*corners.bottomLeft.x);
-          const sourceY = Math.round((1-u)*(1-v)*corners.topLeft.y + u*(1-v)*corners.topRight.y + u*v*corners.bottomRight.y + (1-u)*v*corners.bottomLeft.y);
-          const source = (sourceY * probeWidth + sourceX) * 4; const target = (y * leveled.width + x) * 4;
-          leveledImage.data[target] = probeImage.data[source]; leveledImage.data[target + 1] = probeImage.data[source + 1]; leveledImage.data[target + 2] = probeImage.data[source + 2]; leveledImage.data[target + 3] = 255;
-        }
-        leveledContext.putImageData(leveledImage, 0, 0); const localWeight = decodeScaleWeight(leveledImage);
-        const sourceX = crop.x * image.width / probeWidth;
-        const sourceY = crop.y * image.height / probeHeight;
-        const sourceWidth = crop.width * image.width / probeWidth;
-        const sourceHeight = crop.height * image.height / probeHeight;
-        const scale = Math.min(3, 1600 / sourceWidth);
-        const output = document.createElement('canvas');
-        output.width = Math.max(1, Math.round(sourceWidth * scale));
-        output.height = Math.max(1, Math.round(sourceHeight * scale));
-        output.getContext('2d').drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, output.width, output.height);
-        image.close?.();
-        return new Promise(resolve => output.toBlob(blob => resolve({ foundDisplay: true, preview: blob || file, localWeight }), 'image/jpeg', .92));
-      }
-
-      async function recognizeCroppedDisplay(image) {
-        const form = new FormData();
-        form.append('file', image, 'scale-display.jpg');
-        form.append('language', 'eng');
-        form.append('isOverlayRequired', 'false');
-        form.append('isTable', 'false');
-        form.append('OCREngine', '2');
-        form.append('scale', 'true');
-        const response = await fetch('https://api.ocr.space/parse/image', {
-          method: 'POST', headers: { apikey: 'helloworld' }, body: form
-        });
-        if (!response.ok) throw new Error('無料OCRサービスに接続できませんでした');
-        const data = await response.json();
-        if (data.IsErroredOnProcessing) throw new Error('表示の数字を読み取れませんでした');
-        const text = data.ParsedResults?.map(result => result.ParsedText).join('\n') || '';
-        return selectWeightFromText(text);
-      }
+      const clampRect = (rect, width, height) => {
+        const minWidth = Math.max(80, width * .12); const minHeight = Math.max(45, height * .06);
+        const w = Math.max(minWidth, Math.min(width, rect.w)); const h = Math.max(minHeight, Math.min(height, rect.h));
+        return { x: Math.max(0, Math.min(width - w, rect.x)), y: Math.max(0, Math.min(height - h, rect.y)), w, h };
+      };
 
       async function handleFile(event, field) {
         const file = event.target.files[0]; event.target.value = ''; if (!file) return;
         if (!file.type.startsWith('image/')) return alert('画像ファイルを選択してください。');
         if (file.size > MAX_IMAGE_BYTES) return alert('画像は10MB以下にしてください。');
+        try {
+          const image = await openImage(file); const width = Math.min(1200, image.width); const height = Math.round(image.height * width / image.width);
+          const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+          const context = canvas.getContext('2d', { willReadFrequently: true }); context.drawImage(image, 0, 0, width, height);
+          const detected = findDisplayBounds(context.getImageData(0, 0, width, height)); image.close?.();
+          const rect = clampRect(detected ? { x: detected.x, y: detected.y, w: detected.width, h: detected.height } : { x: width * .18, y: height * .48, w: width * .64, h: height * .20 }, width, height);
+          const previous = cropEditors[field]?.url; if (previous) URL.revokeObjectURL(previous);
+          setCropEditors(editors => ({ ...editors, [field]: { file, url: URL.createObjectURL(file), width, height, rect } }));
+          setConfidenceNotes(notes => ({ ...notes, [field]: '' }));
+        } catch (error) { alert('画像を開けませんでした: ' + error.message); }
+      }
+
+      function beginCropDrag(event, field, mode) {
+        const editor = cropEditors[field]; if (!editor) return;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        dragRef.current = { field, mode, startX: event.clientX, startY: event.clientY, rect: editor.rect, stage: event.currentTarget.closest('.crop-stage').getBoundingClientRect() };
+      }
+
+      function moveCropDrag(event) {
+        const drag = dragRef.current; if (!drag) return;
+        const editor = cropEditors[drag.field]; if (!editor) return;
+        const dx = (event.clientX - drag.startX) * editor.width / drag.stage.width; const dy = (event.clientY - drag.startY) * editor.height / drag.stage.height;
+        const next = drag.mode === 'resize' ? { ...drag.rect, w: drag.rect.w + dx, h: drag.rect.h + dy } : { ...drag.rect, x: drag.rect.x + dx, y: drag.rect.y + dy };
+        setCropEditors(editors => ({ ...editors, [drag.field]: { ...editor, rect: clampRect(next, editor.width, editor.height) } }));
+      }
+
+      function endCropDrag() { dragRef.current = null; }
+
+      async function readSelectedDisplay(field) {
+        const editor = cropEditors[field]; if (!editor) return;
         setOcrProcessing(true); setShowOverlay(true);
         try {
-          const prepared = await prepareScaleDisplay(file);
-          if (!prepared.foundDisplay) throw new Error('緑の表示部を見つけられませんでした。表示部が大きく入るように撮影してください。');
-          const previewUrl = URL.createObjectURL(prepared.preview);
-          const previousUrl = previewUrlsRef.current[field];
-          previewUrlsRef.current[field] = previewUrl;
-          if (previousUrl) URL.revokeObjectURL(previousUrl);
+          await BomataOCR.init(); const image = await openImage(editor.file);
+          const canvas = document.createElement('canvas'); canvas.width = editor.width; canvas.height = editor.height;
+          const context = canvas.getContext('2d', { willReadFrequently: true }); context.drawImage(image, 0, 0, editor.width, editor.height); image.close?.();
+          const rect = editor.rect; const imageData = context.getImageData(Math.round(rect.x), Math.round(rect.y), Math.round(rect.w), Math.round(rect.h));
+          const result = BomataOCR.read(imageData.data, imageData.width, imageData.height);
+          if (!result) throw new Error('枠を緑LCDの内側へ合わせて、もう一度読み取ってください。');
+          const preview = document.createElement('canvas'); preview.width = imageData.width; preview.height = imageData.height; preview.getContext('2d').putImageData(imageData, 0, 0);
+          const previousUrl = previewUrlsRef.current[field]; const previewUrl = preview.toDataURL('image/jpeg', .92); previewUrlsRef.current[field] = previewUrl; if (previousUrl?.startsWith('blob:')) URL.revokeObjectURL(previousUrl);
           setLcdPreviews(previous => ({ ...previous, [field]: previewUrl }));
-          const weight = prepared.localWeight || await recognizeCroppedDisplay(prepared.preview);
-          if (!weight) throw new Error('表示の数字を読み取れませんでした');
-          setFormData(previous => ({ ...previous, [field]: weight }));
-        } catch (error) { alert('画像処理エラー: ' + error.message); }
+          setFormData(previous => ({ ...previous, [field]: result.value.toFixed(3) }));
+          setConfidenceNotes(notes => ({ ...notes, [field]: result.conf < BomataOCR.CONFIDENCE_WARN ? `信頼度 ${(result.conf * 100).toFixed(0)}%：数字を確認・修正してください。` : '' }));
+          setCropEditors(editors => ({ ...editors, [field]: null }));
+        } catch (error) { alert('読み取りエラー: ' + error.message); }
         setOcrProcessing(false); setShowOverlay(false);
       }
 
@@ -149,7 +137,9 @@
             <label className="field-label">{label}</label><div className="weight-display">{formData[field] ? <span className={`weight-value ${tone}`}>{formData[field]}</span> : <span className="weight-placeholder">待機中...</span>}</div>
             <input aria-label={`${label}を手入力`} className="weight-edit" type="number" inputMode="decimal" min="0" max="200" step="0.001" placeholder="認識結果を確認・修正" value={formData[field]} onChange={event => setFormData({ ...formData, [field]: event.target.value })} />
             <div className="btn-row"><label className="btn btn-camera">📷 カメラ<input type="file" accept="image/*" capture="environment" onChange={event => handleFile(event, field)} /></label><label className="btn btn-library">📁 ライブラリ<input type="file" accept="image/*" onChange={event => handleFile(event, field)} /></label></div>
+            {cropEditors[field] && <section className="crop-editor"><h3>緑LCDを黄色枠で囲ってください</h3><p>枠の中をドラッグすると移動、右下の丸をドラッグすると大きさを調整できます。</p><div className="crop-stage" onPointerMove={moveCropDrag} onPointerUp={endCropDrag} onPointerCancel={endCropDrag}><img src={cropEditors[field].url} alt="計量器の写真。黄色い枠を緑LCDへ合わせる。" /><div className="crop-frame" style={{ left: `${cropEditors[field].rect.x / cropEditors[field].width * 100}%`, top: `${cropEditors[field].rect.y / cropEditors[field].height * 100}%`, width: `${cropEditors[field].rect.w / cropEditors[field].width * 100}%`, height: `${cropEditors[field].rect.h / cropEditors[field].height * 100}%` }} onPointerDown={event => beginCropDrag(event, field, 'move')}><span className="crop-handle" aria-label="枠の大きさを調整" onPointerDown={event => { event.stopPropagation(); beginCropDrag(event, field, 'resize'); }} /></div></div><button className="btn-read" type="button" onClick={() => readSelectedDisplay(field)} disabled={ocrProcessing}>この範囲を読み取る</button></section>}
             {lcdPreviews[field] && <figure className="lcd-preview"><figcaption>読み取り対象（緑LCDのみ）</figcaption><img src={lcdPreviews[field]} alt="切り出した計量器の緑LCD表示部" /></figure>}
+            {confidenceNotes[field] && <p className="confidence-note">{confidenceNotes[field]}</p>}
           </div>)}
           <button className="btn-save" onClick={handleSave} disabled={ocrProcessing}>✓ 保存する</button>
         </section>{savedRecords.length > 0 && <section className="card"><h2>記録履歴 ({savedRecords.length})</h2>{savedRecords.map(record => <article className="record" key={record.id}><div className="record-top"><span className="record-num">{record.receiptNumber}</span><span><span className="record-date">{record.date}</span><button className="del-btn" aria-label={`${record.receiptNumber}を削除`} onClick={() => handleDelete(record.id)}>🗑</button></span></div><div className="record-grid"><div><div className="lbl">使用前</div><div className="val before">{record.beforeWeight} kg</div></div><div><div className="lbl">使用後</div><div className="val after">{record.afterWeight} kg</div></div></div><div className="record-usage">使用量: <strong>{(parseFloat(record.beforeWeight) - parseFloat(record.afterWeight)).toFixed(3)}</strong> kg</div></article>)}</section>}</main>
