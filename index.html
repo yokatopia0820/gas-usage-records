@@ -29,7 +29,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
   <script src="bomata-ocr.js?v=2"></script>
-  <script src="ocr-helpers.js?v=adaptive2"></script>
+  <script src="ocr-helpers.js?v=adaptive3"></script>
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
     const STORAGE_KEY = 'gasMeterRecords';
@@ -106,7 +106,7 @@
           previewUrlsRef.current[field] = previewUrl; if (previousUrl?.startsWith('blob:')) URL.revokeObjectURL(previousUrl);
           setLcdPreviews(previous => ({ ...previous, [field]: previewUrl }));
           setCropEditors(editors => ({ ...editors, [field]: null }));
-          const weight = decodeBomataLCD(cropped);
+          const weight = decodeBomataLCD(cropped) || decodeScaleWeight(cropped);
           if (weight) setFormData(previous => ({ ...previous, [field]: weight }));
           setConfidenceNotes(notes => ({ ...notes, [field]: weight ? `緑LCDを自動で切り出し、${weight} kg を入力しました。数値は確認して必要なら修正してください。` : '緑LCDを自動で切り出しましたが、数字を確定できませんでした。重量を入力してください。' }));
         } catch (error) { alert('画像を開けませんでした: ' + error.message); }

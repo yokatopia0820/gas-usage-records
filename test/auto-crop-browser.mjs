@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const photo = 'C:\\Users\\PC_User\\.codex\\codex-remote-attachments\\019ffbc3-cd61-7320-8841-fea18b4430d8\\2C723872-E5BC-455F-92CD-C68CB8F653EA\\3-写真3.jpg';
+const photo = process.env.PHOTO_PATH || 'C:\\Users\\PC_User\\.codex\\codex-remote-attachments\\019ffbc3-cd61-7320-8841-fea18b4430d8\\2C723872-E5BC-455F-92CD-C68CB8F653EA\\3-写真3.jpg';
 const appUrl = process.env.APP_URL || 'https://yokatopia0820.github.io/gas-usage-records/?v=b99d0d2';
 
 async function connect(wsUrl) {
