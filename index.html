@@ -28,7 +28,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
-  <script src="bomata-ocr.js?v=1"></script>
   <script src="ocr-helpers.js?v=adaptive1"></script>
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
@@ -45,12 +44,10 @@
       const [cropEditors, setCropEditors] = useState({});
       const [confidenceNotes, setConfidenceNotes] = useState({});
       const previewUrlsRef = useRef({});
-      const dragRef = useRef(null);
 
       useEffect(() => { try { const saved = localStorage.getItem(STORAGE_KEY); if (saved) setSavedRecords(JSON.parse(saved)); } catch { localStorage.removeItem(STORAGE_KEY); } }, []);
       useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(savedRecords)); }, [savedRecords]);
       useEffect(() => () => Object.values(previewUrlsRef.current).forEach(url => URL.revokeObjectURL(url)), []);
-      useEffect(() => { BomataOCR.init().catch(() => alert('OCRエンジンの準備に失敗しました。')); }, []);
 
       async function openImage(file) {
         if ('createImageBitmap' in window) return createImageBitmap(file);
@@ -78,9 +75,14 @@
           const context = canvas.getContext('2d', { willReadFrequently: true }); context.drawImage(image, 0, 0, width, height);
           const detected = findDisplayBounds(context.getImageData(0, 0, width, height)); image.close?.();
           const rect = clampRect(detected ? { x: detected.x, y: detected.y, w: detected.width, h: detected.height } : { x: width * .18, y: height * .48, w: width * .64, h: height * .20 }, width, height);
-          const previous = cropEditors[field]?.url; if (previous) URL.revokeObjectURL(previous);
-          setCropEditors(editors => ({ ...editors, [field]: { file, url: URL.createObjectURL(file), width, height, rect } }));
-          setConfidenceNotes(notes => ({ ...notes, [field]: '' }));
+          const cropped = context.getImageData(Math.round(rect.x), Math.round(rect.y), Math.round(rect.w), Math.round(rect.h));
+          const preview = document.createElement('canvas'); preview.width = cropped.width; preview.height = cropped.height;
+          preview.getContext('2d').putImageData(cropped, 0, 0);
+          const previousUrl = previewUrlsRef.current[field]; const previewUrl = preview.toDataURL('image/jpeg', .92);
+          previewUrlsRef.current[field] = previewUrl; if (previousUrl?.startsWith('blob:')) URL.revokeObjectURL(previousUrl);
+          setLcdPreviews(previous => ({ ...previous, [field]: previewUrl }));
+          setCropEditors(editors => ({ ...editors, [field]: null }));
+          setConfidenceNotes(notes => ({ ...notes, [field]: detected ? '緑LCDを自動で切り出しました。重量を確認して入力してください。' : '緑LCDを見つけられなかったため、写真の中央付近を切り出しました。重量を確認して入力してください。' }));
         } catch (error) { alert('画像を開けませんでした: ' + error.message); }
       }
 
@@ -142,7 +144,7 @@
             <input aria-label={`${label}を手入力`} className="weight-edit" type="number" inputMode="decimal" min="0" max="200" step="0.001" placeholder="認識結果を確認・修正" value={formData[field]} onChange={event => setFormData({ ...formData, [field]: event.target.value })} />
             <div className="btn-row"><label className="btn btn-camera">📷 カメラ<input type="file" accept="image/*" capture="environment" onChange={event => handleFile(event, field)} /></label><label className="btn btn-library">📁 ライブラリ<input type="file" accept="image/*" onChange={event => handleFile(event, field)} /></label></div>
             {cropEditors[field] && <section className="crop-editor"><h3>緑LCDを黄色枠で囲ってください</h3><p>枠の中をドラッグすると移動、右下の丸をドラッグすると大きさを調整できます。</p><div className="crop-stage" onPointerMove={moveCropDrag} onPointerUp={endCropDrag} onPointerCancel={endCropDrag}><img src={cropEditors[field].url} alt="計量器の写真。黄色い枠を緑LCDへ合わせる。" /><div className="crop-frame" style={{ left: `${cropEditors[field].rect.x / cropEditors[field].width * 100}%`, top: `${cropEditors[field].rect.y / cropEditors[field].height * 100}%`, width: `${cropEditors[field].rect.w / cropEditors[field].width * 100}%`, height: `${cropEditors[field].rect.h / cropEditors[field].height * 100}%` }} onPointerDown={event => beginCropDrag(event, field, 'move')}><span className="crop-handle" aria-label="枠の大きさを調整" onPointerDown={event => { event.stopPropagation(); beginCropDrag(event, field, 'resize'); }} /></div></div><button className="btn-read" type="button" onClick={() => readSelectedDisplay(field)} disabled={ocrProcessing}>この範囲を読み取る</button></section>}
-            {lcdPreviews[field] && <figure className="lcd-preview"><figcaption>読み取り対象（緑LCDのみ）</figcaption><img src={lcdPreviews[field]} alt="切り出した計量器の緑LCD表示部" /></figure>}
+            {lcdPreviews[field] && <figure className="lcd-preview"><figcaption>自動切り出し結果（緑LCDのみ）</figcaption><img src={lcdPreviews[field]} alt="自動で切り出した計量器の緑LCD表示部" /></figure>}
             {confidenceNotes[field] && <p className="confidence-note">{confidenceNotes[field]}</p>}
           </div>)}
           <button className="btn-save" onClick={handleSave} disabled={ocrProcessing}>✓ 保存する</button>
