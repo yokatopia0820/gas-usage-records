@@ -262,6 +262,62 @@
     return plausible[0].normalized;
   }
 
+  // BOMATA panels use fixed-width seven-segment slots.  Unlike generic OCR, this
+  // deliberately ignores the outside frame and scores only the seven segment areas.
+  function decodeBomataLCD(imageData) {
+    const { width, height, data } = imageData;
+    if (width < 80 || height < 40) return null;
+    const greenContrast = new Int16Array(width * height);
+    for (let index = 0; index < greenContrast.length; index++) {
+      const offset = index * 4;
+      greenContrast[index] = data[offset + 1] - Math.max(data[offset], data[offset + 2]);
+    }
+    const patterns = Object.entries(sevenSegmentPatterns);
+    const segmentRects = {
+      a: [.20, .06, .80, .24], b: [.62, .15, .94, .47], c: [.62, .53, .94, .85],
+      d: [.20, .76, .80, .94], e: [.06, .53, .38, .85], f: [.06, .15, .38, .47], g: [.20, .41, .80, .59]
+    };
+    let best = null; const allCandidates = [];
+    for (const slots of [4, 5]) for (let leftRatio = .16; leftRatio <= .34; leftRatio += .02) for (let rightRatio = .82; rightRatio <= .96; rightRatio += .02) {
+      for (let topRatio = .12; topRatio <= .24; topRatio += .03) for (let bottomRatio = .76; bottomRatio <= .91; bottomRatio += .03) {
+        const left = Math.floor(width * leftRatio), right = Math.floor(width * rightRatio);
+        const top = Math.floor(height * topRatio), bottom = Math.floor(height * bottomRatio);
+        if (right - left < slots * 12 || bottom - top < 20) continue;
+        for (const threshold of [12, 20, 28, 36]) {
+          const digits = []; let quality = 0; let valid = true;
+          for (let slot = 0; slot < slots; slot++) {
+            const slotLeft = Math.floor(left + (right - left) * slot / slots);
+            const slotRight = Math.floor(left + (right - left) * (slot + 1) / slots);
+            const density = ([x1, y1, x2, y2]) => {
+              const fromX = Math.floor(slotLeft + (slotRight - slotLeft) * x1), toX = Math.ceil(slotLeft + (slotRight - slotLeft) * x2);
+              const fromY = Math.floor(top + (bottom - top) * y1), toY = Math.ceil(top + (bottom - top) * y2);
+              let ink = 0, area = 0;
+              for (let y = fromY; y < toY; y++) for (let x = fromX; x < toX; x++) { area++; if (greenContrast[y * width + x] < threshold) ink++; }
+              return area ? ink / area : 0;
+            };
+            const scores = Object.fromEntries(Object.entries(segmentRects).map(([name, rect]) => [name, density(rect)]));
+            const strongest = Math.max(...Object.values(scores), .001);
+            for (const name of Object.keys(scores)) scores[name] /= strongest;
+            const candidates = patterns.map(([digit, pattern]) => {
+              const active = new Set(pattern); let loss = 0;
+              for (const [name, score] of Object.entries(scores)) loss += (score - (active.has(name) ? 1 : 0)) ** 2;
+              return { digit, loss };
+            }).sort((a, b) => a.loss - b.loss);
+            digits.push(candidates[0].digit); quality += candidates[1].loss - candidates[0].loss;
+          }
+          const text = digits.join('');
+          if (!valid || !/^\d{4,5}$/.test(text)) continue;
+          const value = `${text.slice(0, -3)}.${text.slice(-3)}`;
+          const candidate = { value, quality: quality / digits.length };
+          allCandidates.push(candidate);
+          if (!best || candidate.quality > best.quality) best = candidate;
+        }
+      }
+    }
+    root.__bomataCandidates = allCandidates.sort((left, right) => right.quality - left.quality).slice(0, 30);
+    return best ? best.value : null;
+  }
+
   root.selectWeightFromText = selectWeightFromText;
   root.findDisplayBounds = findDisplayBounds;
   root.estimateDisplayAngle = estimateDisplayAngle;
@@ -276,5 +332,6 @@
   root.decodeAdaptiveSevenSegment = decodeAdaptiveSevenSegment;
   root.decodeSevenSegment = decodeSevenSegment;
   root.decodeFixedScaleSlots = decodeFixedScaleSlots;
-  if (typeof module !== 'undefined') module.exports = { selectWeightFromText, findDisplayBounds, estimateDisplayAngle, findDisplayCorners, displayCropRect, closestSevenSegmentDigit, bestDigitFromSegmentScores, bestDigitByContrast, selectStableWeight, selectPreferredWeight, decodeFixedScaleSlots, decodeAdaptiveSevenSegment, decodeScaleWeight, decodeSevenSegment };
+  root.decodeBomataLCD = decodeBomataLCD;
+  if (typeof module !== 'undefined') module.exports = { selectWeightFromText, findDisplayBounds, estimateDisplayAngle, findDisplayCorners, displayCropRect, closestSevenSegmentDigit, bestDigitFromSegmentScores, bestDigitByContrast, selectStableWeight, selectPreferredWeight, decodeFixedScaleSlots, decodeAdaptiveSevenSegment, decodeScaleWeight, decodeSevenSegment, decodeBomataLCD };
 })(typeof globalThis === 'undefined' ? this : globalThis);

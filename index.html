@@ -28,6 +28,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
+  <script src="bomata-ocr.js?v=2"></script>
   <script src="ocr-helpers.js?v=adaptive1"></script>
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
@@ -65,6 +66,28 @@
         return { x: Math.max(0, Math.min(width - w, rect.x)), y: Math.max(0, Math.min(height - h, rect.y)), w, h };
       };
 
+      function rectifyLcd(imageData, bounds) {
+        const corners = findDisplayCorners(imageData, bounds); if (!corners) return null;
+        const distance = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
+        const width = Math.max(80, Math.round(Math.max(distance(corners.topLeft, corners.topRight), distance(corners.bottomLeft, corners.bottomRight))));
+        const height = Math.max(40, Math.round(Math.max(distance(corners.topLeft, corners.bottomLeft), distance(corners.topRight, corners.bottomRight))));
+        const output = new ImageData(width, height);
+        for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+          const u = x / Math.max(1, width - 1), v = y / Math.max(1, height - 1);
+          const sourceX = Math.round((1-u)*(1-v)*corners.topLeft.x + u*(1-v)*corners.topRight.x + u*v*corners.bottomRight.x + (1-u)*v*corners.bottomLeft.x);
+          const sourceY = Math.round((1-u)*(1-v)*corners.topLeft.y + u*(1-v)*corners.topRight.y + u*v*corners.bottomRight.y + (1-u)*v*corners.bottomLeft.y);
+          const source = (sourceY * imageData.width + sourceX) * 4, target = (y * width + x) * 4;
+          output.data[target] = imageData.data[source]; output.data[target + 1] = imageData.data[source + 1]; output.data[target + 2] = imageData.data[source + 2]; output.data[target + 3] = 255;
+        }
+        const inner = findDisplayBounds(output); if (!inner) return output;
+        const cropped = new ImageData(inner.width, inner.height);
+        for (let y = 0; y < inner.height; y++) for (let x = 0; x < inner.width; x++) {
+          const source = ((inner.y + y) * output.width + inner.x + x) * 4, target = (y * inner.width + x) * 4;
+          cropped.data[target] = output.data[source]; cropped.data[target + 1] = output.data[source + 1]; cropped.data[target + 2] = output.data[source + 2]; cropped.data[target + 3] = 255;
+        }
+        return cropped;
+      }
+
       async function handleFile(event, field) {
         const file = event.target.files[0]; event.target.value = ''; if (!file) return;
         if (!file.type.startsWith('image/')) return alert('画像ファイルを選択してください。');
@@ -73,7 +96,8 @@
           const image = await openImage(file); const width = Math.min(1200, image.width); const height = Math.round(image.height * width / image.width);
           const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
           const context = canvas.getContext('2d', { willReadFrequently: true }); context.drawImage(image, 0, 0, width, height);
-          const detected = findDisplayBounds(context.getImageData(0, 0, width, height)); image.close?.();
+          const sourceImageData = context.getImageData(0, 0, width, height);
+          const detected = findDisplayBounds(sourceImageData); image.close?.();
           const rect = clampRect(detected ? { x: detected.x, y: detected.y, w: detected.width, h: detected.height } : { x: width * .18, y: height * .48, w: width * .64, h: height * .20 }, width, height);
           const cropped = context.getImageData(Math.round(rect.x), Math.round(rect.y), Math.round(rect.w), Math.round(rect.h));
           const preview = document.createElement('canvas'); preview.width = cropped.width; preview.height = cropped.height;
@@ -82,7 +106,9 @@
           previewUrlsRef.current[field] = previewUrl; if (previousUrl?.startsWith('blob:')) URL.revokeObjectURL(previousUrl);
           setLcdPreviews(previous => ({ ...previous, [field]: previewUrl }));
           setCropEditors(editors => ({ ...editors, [field]: null }));
-          setConfidenceNotes(notes => ({ ...notes, [field]: detected ? '緑LCDを自動で切り出しました。重量を確認して入力してください。' : '緑LCDを見つけられなかったため、写真の中央付近を切り出しました。重量を確認して入力してください。' }));
+          const weight = decodeBomataLCD(cropped);
+          if (weight) setFormData(previous => ({ ...previous, [field]: weight }));
+          setConfidenceNotes(notes => ({ ...notes, [field]: weight ? `緑LCDを自動で切り出し、${weight} kg を入力しました。数値は確認して必要なら修正してください。` : '緑LCDを自動で切り出しましたが、数字を確定できませんでした。重量を入力してください。' }));
         } catch (error) { alert('画像を開けませんでした: ' + error.message); }
       }
 
